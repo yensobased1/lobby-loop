@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop Zen
 ;@Ahk2Exe-SetDescription Lobby Loop Zen
-;@Ahk2Exe-SetVersion 7.1.0
+;@Ahk2Exe-SetVersion 7.2.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop Zen"
-VERSION := "7.1"
+VERSION := "7.2"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,17 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.2  (17 Nov 2026)",
+    "  + New status box: rounded card, status light (green running, amber paused,",
+    "    grey off), stop-timer progress bar, last placement and XP",
+    "  + Drag the status box anywhere (tray > Move status box)",
+    "  + Tray > Stop timer: one click for 30 min, 1, 2, 4 or 8 hours",
+    "  + Hover the tray icon to see the status",
+    "  + Windows notifications when it stops, gets stuck or Fortnite crashes",
+    "  + Self-test shows a card with a tick or cross for each check",
+    "  + Tray > Keyboard shortcuts",
+    "  + Discord: !timer 2h / !timer 9:30pm / !timer off and !profile overnight",
+    "",
     "v7.1  (17 Nov 2026)",
     "  + Dark mode (Settings > Look), with a dark title bar",
     "  + New Settings window: sidebar with sections (Play, Schedule, Extras,",
@@ -155,7 +166,10 @@ DEFAULTS := [
     ["DISCORD_CHANNEL_ID", "", "Discord channel ID the bot listens to"],
     ["DISCORD_ALLOWED_IDS", "", "Discord user IDs allowed to send commands, comma separated (blank = anyone)"],
     ["THEME", "dark", "Window theme: dark or light"],
-    ["OVERLAY_CORNER", "top-left", "Status box corner: top-left, top-right, bottom-left, bottom-right"],
+    ["OVERLAY_CORNER", "top-left", "Status box corner: top-left, top-right, bottom-left, bottom-right or custom"],
+    ["OVERLAY_X", 10, "Status box position when the corner is custom (set by dragging)"],
+    ["OVERLAY_Y", 10, "Status box position when the corner is custom (set by dragging)"],
+    ["NOTIFY", 1, "1 = Windows notifications when it stops, gets stuck or Fortnite crashes"],
     ["OVERLAY_SIZE", "normal", "Status box size: small, normal or large"],
     ["AUTO_START", 0, "1 = start by itself when you click into Fortnite"],
     ["START_AT_TIME", "", "Start every day at this time, e.g. 2:00 AM (blank = off)"],
@@ -288,6 +302,11 @@ botLastId := ""        ; newest Discord message the bot has seen
 botFails := 0
 blackoutGui := ""
 overlayHidden := false
+lastPlace := ""        ; last placement read from the end screen
+lastXP := ""
+movingOverlay := false
+testCard := ""
+OV := Map()            ; status box controls
 AR := LoadTranslations()
 WIZ := Map()
 PROFILES := Map(
@@ -334,16 +353,25 @@ if (!A_IsCompiled && FileExist(A_ScriptDir "\lobby_loop.ico"))
 A_IconTip := TITLE
 profileMenu := Menu()
 BuildProfileMenu()
+timerMenu := Menu()
+for preset in [["30 minutes", 0, 30], ["1 hour", 1, 0], ["2 hours", 2, 0], ["4 hours", 4, 0], ["8 hours", 8, 0]]
+    timerMenu.Add(Tx(preset[1]), QuickTimer.Bind(preset[2], preset[3]))
+timerMenu.Add()
+timerMenu.Add(Tx("No limit"), QuickTimer.Bind(0, 0))
+timerMenu.Add(Tx("Custom..."), (*) => OpenSettings())
 A_TrayMenu.Delete()
 trayStart := Tx("Start / Stop") "  (" HK_TOGGLE ")"
 A_TrayMenu.Add(trayStart, (*) => ToggleRun())
 A_TrayMenu.Add(Tx("Settings") "  (" HK_SETTINGS ")", (*) => OpenSettings())
 A_TrayMenu.Add(Tx("Profile"), profileMenu)
+A_TrayMenu.Add(Tx("Stop timer"), timerMenu)
 A_TrayMenu.Add(Tx("Self-test") "  (" HK_TEST ")", (*) => SelfTest())
 A_TrayMenu.Add(Tx("Setup wizard"), (*) => StartWizard())
 A_TrayMenu.Add()
 A_TrayMenu.Add(Tx("Dim screen") "  (" HK_BLACKOUT ")", (*) => ToggleBlackout())
 A_TrayMenu.Add(Tx("Show / hide status box") "  (" HK_OVERLAY ")", (*) => ToggleOverlay())
+A_TrayMenu.Add(Tx("Move status box"), (*) => MoveOverlay())
+A_TrayMenu.Add(Tx("Keyboard shortcuts"), (*) => ShowShortcuts())
 A_TrayMenu.Add()
 A_TrayMenu.Add(Tx("Stats dashboard"), (*) => OpenDashboard())
 A_TrayMenu.Add(Tx("Open history (Excel)"), (*) => OpenHistory())
@@ -362,20 +390,9 @@ A_TrayMenu.Default := trayStart
 
 ; ---------- Status box ----------
 statusTxt := ""
-if S["SHOW_OVERLAY"] {
-    sizes := Map("small", [9, 420, 74], "normal", [10, 500, 86], "large", [13, 640, 110])
-    sz := sizes.Has(StrLower(S["OVERLAY_SIZE"])) ? sizes[StrLower(S["OVERLAY_SIZE"])] : sizes["normal"]
-    statusGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")
-    statusGui.BackColor := "101018"
-    statusGui.SetFont("s" sz[1] " bold", "Segoe UI")
-    statusTxt := statusGui.Add("Text", "cLime w" sz[2] " h" sz[3] (IsArabic() ? " Right" : ""), "")
-    statusGui.Show("x10 y10 NoActivate AutoSize")
-    WinSetTransparent(215, statusGui)
-    PlaceOverlay()
-    statusGui.GetPos(&ox, &oy, &ow, &oh)
-    Log("Status box at " ox "," oy " (" ow "x" oh ")")
-    SetTimer(RefreshOverlay, 400)
-}
+if S["SHOW_OVERLAY"]
+    BuildOverlay()
+SetTimer(RefreshOverlay, 400)
 
 ApplyStartSchedule()
 SetTimer(AutoStartWatch, 2000)
@@ -503,8 +520,11 @@ ToggleRun(reason := "you") {
         SetStatus(Tx("Stopped"))
         summary := FormatDuration(runMs) ", " matches " match" (matches = 1 ? "" : "es")
         ShowTip(TITLE ": " Tx("OFF") "`n" Tx("This run: {1}", summary), 4000)
-        if (reason != "you")
+        if (reason != "you") {
             Discord("Stopped (" reason "). This run: " summary "`n" LeaderboardLine())
+            if (reason != "exit" && reason != "update")
+                Notify(Tx("Stopped"), reason ". " Tx("This run: {1}", summary))
+        }
         if S["BEEP"]
             SoundBeep(500, 120)
     }
@@ -535,34 +555,74 @@ AutoStartWatch() {
 }
 
 SelfTest() {
-    static lastShown := 0
-    if (A_TickCount - lastShown < 6000) {          ; pressed again while showing: close it
-        lastShown := 0
-        ToolTip()
+    global testCard
+    if IsObject(testCard) {                        ; pressed again while showing: close it
+        CloseCard(testCard)
         return
     }
-    lastShown := A_TickCount
-    txt := "Fortnite window: " (WinExist(S["GAME_WINDOW"]) ? "found" : "NOT found")
-    txt .= "`nActive now: " (WinActive(S["GAME_WINDOW"]) ? "Fortnite" : "something else")
-    txt .= "`nScreen: " A_ScreenWidth "x" A_ScreenHeight "    Admin: " (A_IsAdmin ? "yes" : "NO") "    Version: " VERSION (A_IsCompiled ? " exe" : "")
-    txt .= "`nStart: " DescribeStart() "    Stop: " DescribeStop() ", then " StrLower(ActionLabel(S["STOP_ACTION"]))
-    txt .= "`nAuto-start: " (S["AUTO_START"] ? "on" : "off") "    Open Fortnite by itself: " (S["LAUNCH_FORTNITE"] ? "on" : "off")
-    txt .= "`nWatchdog: " (S["STUCK_MINUTES"] > 0 ? S["STUCK_MINUTES"] " min" : "off") "    Discord: " (DiscordUrl() != "" ? "on" : "off") "    Updates: " (UpdateUrl() != "" ? "on" : "no link")
-    txt .= "`nMove keys: " KEYMAP["fwd"] KEYMAP["left"] KEYMAP["back"] KEYMAP["right"] "  jump " KEYMAP["jump"] "  sprint " KEYMAP["sprint"] "  crouch " KEYMAP["crouch"] "  slots " SLOT_KEYS.Length
+    ok := "✅", no := "❌", info := "•"
+    rows := []
+    hasWin := WinExist(S["GAME_WINDOW"]), isActive := WinActive(S["GAME_WINDOW"])
+    rows.Push([hasWin ? ok : no, Tx("Fortnite is open")])
+    rows.Push([isActive ? ok : "⚠️", isActive ? Tx("Fortnite is the active window") : Tx("Click into Fortnite before starting")])
+    rows.Push([A_IsAdmin ? ok : no, Tx("Running as Administrator")])
+    txt := "Fortnite window: " (hasWin ? "found" : "NOT found") ", active: " (isActive ? "yes" : "no") ", admin: " (A_IsAdmin ? "yes" : "NO")
     for name in ["lobby", "end"] {
         t0 := A_TickCount
         b := FindButton(name)
         ms := A_TickCount - t0
-        label := (name = "lobby") ? "Lobby READY/PLAY" : "End PLAY AGAIN"
-        txt .= "`n" label ": " (b ? "FOUND at " b.x ", " b.y " (" b.w "x" b.h ")" : "not on screen") "  [" ms " ms]"
+        label := (name = "lobby") ? Tx("Lobby Ready / Play button") : Tx("End-of-match Play Again button")
+        rows.Push([b ? ok : "⚪", label ": " (b ? Tx("found") " (" b.x ", " b.y ")" : Tx("not on screen right now")), !b])
+        txt .= "`n" name ": " (b ? "FOUND at " b.x ", " b.y " (" b.w "x" b.h ")" : "not on screen") "  [" ms " ms]"
     }
-    seen := ""
-    for i, p in POPUPS
-        if PopupVisible(p)
-            seen .= " #" i
-    txt .= "`nLearned popup buttons: " POPUPS.Length (seen != "" ? "   visible now:" seen : "")
+    rows.Push([info, Tx("Start: {1}", DescribeStart()) "   ·   " Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), true])
+    rows.Push([info, "Discord: " (DiscordUrl() != "" ? Tx("on") : Tx("off")) "   ·   " Tx("Phone control") ": " (BotEnabled() ? Tx("on") : Tx("off")) "   ·   " Tx("Updates") ": " (UpdateUrl() != "" ? Tx("on") : Tx("off")), true])
+    rows.Push([info, Tx("Screen {1}", A_ScreenWidth "x" A_ScreenHeight) "   ·   v" VERSION (A_IsCompiled ? " exe" : "") "   ·   " Tx("Learned popup buttons: {1}", POPUPS.Length), true])
+    txt .= "`nStart: " DescribeStart() ", stop: " DescribeStop() ", Discord: " (DiscordUrl() != "" ? "on" : "off") ", bot: " (BotEnabled() ? "on" : "off") ", popups: " POPUPS.Length
     Log("Self-test:`n" txt)
-    ShowTip(txt, 6000)
+    testCard := ShowCard("🔎 " Tx("Self-test"), rows, 8000, Tx("Closes by itself, or press {1} again.", HK_TEST))
+}
+
+; A small card in the middle of the screen that doesn't take focus from the game
+ShowCard(heading, rows, ms, footer := "", col := 28) {
+    g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
+    g.BackColor := "15152B"
+    g.MarginX := 22, g.MarginY := 16
+    g.SetFont("s13 bold cECECF4", "Segoe UI")
+    g.Add("Text", "w560 BackgroundTrans", heading)
+    for r in rows {
+        g.SetFont("s10 norm cECECF4")
+        g.Add("Text", "xm y+9 w" col " BackgroundTrans", r[1])
+        g.SetFont("s10 norm c" ((r.Length >= 3 && r[3]) ? "A0A0C0" : "ECECF4"))
+        g.Add("Text", "x+4 yp w" (558 - col) " BackgroundTrans", r[2])
+    }
+    if (footer != "") {
+        g.SetFont("s8 norm c777790")
+        g.Add("Text", "xm y+14 w560 BackgroundTrans", footer)
+    }
+    g.Show("xCenter yCenter NoActivate AutoSize")
+    g.GetPos(, , &w, &h)
+    WinSetRegion("0-0 w" w " h" h " R20-20", g)
+    WinSetTransparent(242, g)
+    if ms
+        SetTimer(() => CloseCard(g), -ms)
+    return g
+}
+
+CloseCard(g) {
+    global testCard
+    try g.Destroy()
+    if (IsObject(testCard) && testCard = g)
+        testCard := ""
+}
+
+ShowShortcuts() {
+    rows := []
+    for pair in HOTKEY_FIELDS
+        rows.Push([S[pair[1]], Tx(pair[2])])
+    rows.Push(["", ""])
+    rows.Push(["🖱️", Tx("Double-click the tray icon to start or stop"), true])
+    ShowCard("⌨️ " Tx("Keyboard shortcuts"), rows, 10000, Tx("Change them in Settings > Hotkeys."), 90)
 }
 
 ShowWhatsNew() {
@@ -766,7 +826,7 @@ OpenSettings() {
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
     first := true
     for pair in [["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
-                 ["READ_RESULTS", "Read my placement and XP after each match"]] {
+                 ["READ_RESULTS", "Read my placement and XP after each match"], ["NOTIFY", "Windows notifications (stopped, stuck, crashed)"]] {
         c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+18" : " y+10"), Tx(pair[2]), S[pair[1]], CW - 30))
         first := false
     }
@@ -818,8 +878,10 @@ OpenSettings() {
     c["THEME"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Dark"), Tx("Light")]))
     c["THEME"].Choose(DarkOn() ? 1 : 2)
     add(UiText(g, "x" CX " y+16 w" CW, Tx("Status box corner")))
-    corners := ["top-left", "top-right", "bottom-left", "bottom-right"]
-    c["CORNER"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right")]))
+    corners := ["top-left", "top-right", "bottom-left", "bottom-right", "custom"]
+    c["CORNER"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right"), Tx("Where I dragged it")]))
+    mv := add(UiButton(g, "x+10 yp-1 w200", "✋ " Tx("Move status box")))
+    mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
     ci := 1
     for i, k in corners
         if (k = StrLower(S["OVERLAY_CORNER"]))
@@ -928,7 +990,7 @@ SaveSettingsGui(g, c) {
     SetSetting("STOP_ACTION", ACTIONS[c["ACTION"].Value][1])
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
-    for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS", "SCREENSHOT_EVERY_MATCH"]
+    for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS", "SCREENSHOT_EVERY_MATCH", "NOTIFY"]
         SetSetting(key, c[key].Value)
     if (c["START_WITH_WINDOWS"].Value != (S["START_WITH_WINDOWS"] ? 1 : 0))
         SetStartWithWindows(c["START_WITH_WINDOWS"].Value)
@@ -955,7 +1017,7 @@ SaveSettingsGui(g, c) {
     SetSetting("LANG", newLang)
     SetSetting("THEME", newTheme)
     SetSetting("OVERLAY_SIZE", newSize)
-    SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right"][c["CORNER"].Value])
+    SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right", "custom"][c["CORNER"].Value])
     g.Destroy()
     botLastId := "", botFails := 0
     if running
@@ -1227,6 +1289,7 @@ TryLaunch() {
     launchTick := A_TickCount
     Log("Opening Fortnite (try " launchTries ")")
     Discord("Fortnite isn't running, opening it (try " launchTries ")")
+    Notify("Fortnite", Tx("Fortnite isn't running. Opening it (try {1}).", launchTries))
     try Run(launchTries = 1 ? FN_URI : FN_URI_OLD)
 }
 
@@ -1235,6 +1298,7 @@ Unstick() {
     unstickTries += 1
     mins := S["STUCK_MINUTES"]
     Log("Stuck: no match finished in " mins " min (step " unstickTries ")")
+    Notify(Tx("Looks stuck"), Tx("No match finished in {1} minutes. Trying to fix it.", mins))
     if S["BEEP"]
         SoundBeep(700, 150)
     ReleaseAll()
@@ -1653,6 +1717,41 @@ GuiOpts(extra := "") {
 LoadTranslations() {
     return Map(
         "Start / Stop", "تشغيل / إيقاف",
+        "Stop timer", "مؤقت الإيقاف",
+        "30 minutes", "30 دقيقة",
+        "1 hour", "ساعة",
+        "2 hours", "ساعتان",
+        "4 hours", "4 ساعات",
+        "8 hours", "8 ساعات",
+        "No limit", "بلا حد",
+        "Custom...", "مخصص...",
+        "Move status box", "تحريك صندوق الحالة",
+        "Keyboard shortcuts", "اختصارات لوحة المفاتيح",
+        "this run", "هذه الجلسة",
+        "Drag the status box where you want it. It saves by itself after 20 seconds.", "اسحب صندوق الحالة إلى المكان الذي تريده. يُحفظ تلقائيًا بعد 20 ثانية.",
+        "Status box position saved.", "تم حفظ موضع صندوق الحالة.",
+        "Where I dragged it", "حيث سحبته",
+        "Windows notifications (stopped, stuck, crashed)", "إشعارات Windows (توقف، تعليق، تعطل)",
+        "Fortnite isn't running. Opening it (try {1}).", "Fortnite لا يعمل. جارٍ فتحه (المحاولة {1}).",
+        "Looks stuck", "يبدو عالقًا",
+        "No match finished in {1} minutes. Trying to fix it.", "لم تنته أي مباراة خلال {1} دقيقة. جارٍ المحاولة لإصلاح ذلك.",
+        "Fortnite is open", "Fortnite مفتوح",
+        "Fortnite is the active window", "Fortnite هو النافذة النشطة",
+        "Click into Fortnite before starting", "اضغط داخل Fortnite قبل التشغيل",
+        "Running as Administrator", "يعمل كمسؤول",
+        "Lobby Ready / Play button", "زر جاهز / لعب في الردهة",
+        "End-of-match Play Again button", "زر العب مجددًا بعد المباراة",
+        "found", "تم العثور عليه",
+        "not on screen right now", "غير ظاهر على الشاشة الآن",
+        "Start: {1}", "التشغيل: {1}",
+        "on", "مفعّل",
+        "off", "معطّل",
+        "Updates", "التحديثات",
+        "Screen {1}", "الشاشة {1}",
+        "Learned popup buttons: {1}", "أزرار النوافذ المنبثقة المحفوظة: {1}",
+        "Closes by itself, or press {1} again.", "يُغلق تلقائيًا، أو اضغط {1} مجددًا.",
+        "Double-click the tray icon to start or stop", "انقر نقرًا مزدوجًا على أيقونة الشريط للتشغيل أو الإيقاف",
+        "Change them in Settings > Hotkeys.", "غيّرها من الإعدادات > مفاتيح الاختصار.",
         "Hotkeys", "مفاتيح الاختصار",
         "Change the keys if they clash with your game or keyboard.", "غيّر المفاتيح إن تعارضت مع لعبتك أو لوحة المفاتيح.",
         "Lobby Loop keys", "مفاتيح Lobby Loop",
@@ -1867,9 +1966,101 @@ PlaceOverlay() {
         return
     statusGui.GetPos(, , &w, &h)
     corner := StrLower(String(S["OVERLAY_CORNER"]))
-    x := InStr(corner, "right") ? A_ScreenWidth - w - 10 : 10
-    y := InStr(corner, "bottom") ? A_ScreenHeight - h - 60 : 10
+    if (corner = "custom") {
+        x := Max(0, Min(Integer(S["OVERLAY_X"]), A_ScreenWidth - w))
+        y := Max(0, Min(Integer(S["OVERLAY_Y"]), A_ScreenHeight - h))
+    } else {
+        x := InStr(corner, "right") ? A_ScreenWidth - w - 12 : 12
+        y := InStr(corner, "bottom") ? A_ScreenHeight - h - 60 : 12
+    }
     statusGui.Move(x, y)
+}
+
+BuildOverlay() {
+    global statusGui, statusTxt, OV
+    sizes := Map("small", [9, 360], "normal", [10, 420], "large", [12, 510])
+    sz := sizes.Has(StrLower(S["OVERLAY_SIZE"])) ? sizes[StrLower(S["OVERLAY_SIZE"])] : sizes["normal"]
+    fs := sz[1], W := sz[2], pad := 16, inner := sz[2] - 32
+    al := IsArabic() ? " Right" : ""
+    statusGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")
+    statusGui.BackColor := "15152B"
+    statusGui.MarginX := pad, statusGui.MarginY := 10
+    statusGui.SetFont("s" (fs + 4) " c777790", "Segoe UI")
+    OV["dot"] := statusGui.Add("Text", "x" pad " y6 w" (fs * 2 + 4) " BackgroundTrans", "●")
+    statusGui.SetFont("s" (fs + 1) " bold cECECF4")
+    OV["head"] := statusGui.Add("Text", "x+2 yp+5 w" (inner - fs * 2 - 6) " BackgroundTrans" al, TITLE)
+    statusGui.SetFont("s" fs " norm cD0D0E8")
+    OV["now"] := statusGui.Add("Text", "x" pad " y+6 w" inner " BackgroundTrans" al, "")
+    OV["bar"] := statusGui.Add("Progress", "x" pad " y+8 w" inner " h5 cF7FE19 Background2A2A4E", 0)
+    statusGui.SetFont("s" (fs - 1) " norm cA0A0C0")
+    OV["timer"] := statusGui.Add("Text", "x" pad " y+6 w" inner " BackgroundTrans" al, "")
+    OV["run"] := statusGui.Add("Text", "x" pad " y+4 w" inner " BackgroundTrans" al, "")
+    OV["total"] := statusGui.Add("Text", "x" pad " y+4 w" inner " BackgroundTrans" al, "")
+    statusTxt := OV["now"]
+    statusGui.Show("x-4000 y-4000 NoActivate AutoSize")
+    WinSetTransparent(228, statusGui)
+    statusGui.GetPos(, , &w, &h)
+    WinSetRegion("0-0 w" w " h" h " R20-20", statusGui)
+    PlaceOverlay()
+    statusGui.GetPos(&ox, &oy, &ow, &oh)
+    Log("Status box at " ox "," oy " (" ow "x" oh ")")
+}
+
+; Lets you drag the status box with the mouse; clicking the menu item again (or 20 s) saves the spot
+MoveOverlay() {
+    global movingOverlay
+    if (statusTxt = "")
+        return
+    if overlayHidden
+        ToggleOverlay()
+    if movingOverlay {
+        FinishMoveOverlay()
+        return
+    }
+    movingOverlay := true
+    WinSetExStyle("-0x20", statusGui)
+    WinSetTransparent(255, statusGui)
+    OnMessage(0x201, OverlayDrag)
+    ShowTip(Tx("Drag the status box where you want it. It saves by itself after 20 seconds."), 4000)
+    SetTimer(FinishMoveOverlay, -20000)
+}
+
+OverlayDrag(wParam, lParam, msg, hwnd) {
+    if !movingOverlay
+        return
+    if (DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr") = statusGui.Hwnd) {
+        PostMessage(0xA1, 2, 0, , "ahk_id " statusGui.Hwnd)     ; drag by the "title bar"
+        return 0
+    }
+}
+
+FinishMoveOverlay() {
+    global movingOverlay
+    if !movingOverlay
+        return
+    SetTimer(FinishMoveOverlay, 0)
+    movingOverlay := false
+    OnMessage(0x201, OverlayDrag, 0)
+    WinSetExStyle("+0x20", statusGui)
+    WinSetTransparent(228, statusGui)
+    statusGui.GetPos(&x, &y)
+    SetSetting("OVERLAY_X", x)
+    SetSetting("OVERLAY_Y", y)
+    SetSetting("OVERLAY_CORNER", "custom")
+    ShowTip(Tx("Status box position saved."), 2000)
+}
+
+Notify(heading, msg) {
+    if S["NOTIFY"]
+        try TrayTip(msg, TITLE " · " heading, "Iconi Mute")
+}
+
+QuickTimer(h, m, *) {
+    SaveStop(h, m, "")
+    if running
+        ApplyStopLimits()
+    Log("Quick stop timer: " DescribeStop())
+    ShowTip(Tx("Stop: {1}", DescribeStop()), 2500)
 }
 
 ToggleOverlay() {
@@ -2113,7 +2304,8 @@ $t2 = Read-Text $b
 
 ; Called right after Play Again was clicked
 RecordMatch(res) {
-    global totalXP, bestPlace
+    global totalXP, bestPlace, lastPlace, lastXP
+    lastPlace := res.place, lastXP := res.xp
     if !FileExist(MATCHES_FILE)
         try FileAppend("Date,Time,Placement,XP`r`n", MATCHES_FILE, "UTF-8")
     try FileAppend(FormatTime(, "yyyy-MM-dd") "," FormatTime(, "HH:mm") "," res.place "," res.xp "`r`n", MATCHES_FILE, "UTF-8")
@@ -2342,13 +2534,44 @@ HandleCommand(text) {
     parts := StrSplit(Trim(SubStr(text, 2)), " ", , 2)
     cmd := StrLower(parts[1])
     target := parts.Length >= 2 ? Trim(parts[2]) : ""
+    arg := ""
+    if (cmd = "timer" || cmd = "profile") {         ; these take a value, not a PC name
+        arg := target
+        target := ""
+    }
     if (target != "" && !InStr(PlayerName() " " TITLE " " BASE, target))
         return                                      ; meant for someone else
     who := "**" PlayerName() "**: "
     Log("Discord command: " text)
     switch cmd {
         case "help":
-            Discord(who "commands: ``!start`` ``!stop`` ``!status`` ``!ss`` (screenshot) ``!log`` ``!summary`` ``!lb`` (leaderboard) ``!dim``. Add a name to target one PC, e.g. ``!stop zen``")
+            Discord(who "commands: ``!start`` ``!stop`` ``!status`` ``!ss`` (screenshot) ``!log`` ``!summary`` ``!lb`` (leaderboard) ``!dim`` ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight``. Add a name to target one PC, e.g. ``!stop zen``")
+        case "timer":
+            v := StrLower(Trim(arg))
+            if (v = "off" || v = "none" || v = "0") {
+                SaveStop(0, 0, "")
+            } else if (ck := ParseClock(v)) {
+                SaveStop(0, 0, Format("{:02}:{:02}", ck.h, ck.m))
+            } else if (dur := ParseDuration(v)) {
+                SaveStop(dur.h, dur.m, "")
+            } else {
+                Discord(who "I didn't understand '" arg "'. Try ``!timer 2h``, ``!timer 9:30pm`` or ``!timer off``.")
+                return
+            }
+            if running
+                ApplyStopLimits()
+            Discord(who "stop timer: " DescribeStop())
+        case "profile":
+            chosen := ""
+            for key in PROFILE_KEYS
+                if (arg != "" && InStr(key, StrLower(Trim(arg))) = 1)
+                    chosen := key
+            if (chosen = "") {
+                Discord(who "profiles: ``overnight`` ``quick`` ``chill`` ``custom``")
+                return
+            }
+            ApplyProfile(chosen)
+            Discord(who "profile " chosen ". Stop: " DescribeStop())
         case "status":
             Discord(who StatusText())
         case "start":
@@ -2761,29 +2984,51 @@ FormatDuration(ms) {
 }
 
 RefreshOverlay() {
+    static lastState := ""
+    ; tray icon tooltip, even when the status box is hidden
+    tip := TITLE ": " (running ? Tx("ON") " " FormatDuration(A_TickCount - sessionStart) ", " matches " " Tx("Matches") : Tx("OFF"))
+    A_IconTip := SubStr(tip, 1, 120)
     if (statusTxt = "" || overlayHidden)
         return
-    if running
-        head := Tx("ON") "   " FormatDuration(A_TickCount - sessionStart) "   " Tx("Matches") ": " matches "   " Tx("Clicks") ": " clicks
-    else
-        head := Tx("OFF") "   (" Tx("{1} = start,  {2} = settings", HK_TOGGLE, HK_SETTINGS) ")"
-    stopLine := Tx("Stop: {1}", DescribeStop())
-    if running {
-        left := TimeLeftMs()
-        if (left = "")
-            stopLine := Tx("Stop: no limit ({1} to set)", HK_SETTINGS)
-        else if (stopAt != "")
-            stopLine := Tx("Stops in {1}   (at {2})", FormatDuration(left), FormatTime(stopAt, "h:mm tt"))
-        else
-            stopLine := Tx("Stops in {1}", FormatDuration(left))
+    state := !running ? "off" : (WinActive(S["GAME_WINDOW"]) ? "on" : "paused")
+    if (state != lastState) {
+        OV["dot"].SetFont("c" (state = "on" ? "3DDC84" : state = "paused" ? "FFB300" : "777790"))
+        lastState := state
+    }
+    SetIfChanged(OV["head"], TITLE "   " (running ? Tx("ON") "  " FormatDuration(A_TickCount - sessionStart) : Tx("OFF")))
+    SetIfChanged(OV["now"], running ? lastMsg : Tx("{1} = start,  {2} = settings", HK_TOGGLE, HK_SETTINGS))
+    ; stop timer + progress bar
+    left := running ? TimeLeftMs() : ""
+    pct := 0
+    if (left != "") {
+        elapsed := A_TickCount - sessionStart
+        pct := Round(100 * elapsed / Max(1, elapsed + Max(0, left)))
+        timerTxt := "⏹ " (stopAt != "" ? Tx("Stops in {1}   (at {2})", FormatDuration(left), FormatTime(stopAt, "h:mm tt")) : Tx("Stops in {1}", FormatDuration(left)))
+    } else if running {
+        timerTxt := "⏹ " Tx("Stop: no limit ({1} to set)", HK_SETTINGS)
     } else if (startAtNext != "") {
-        stopLine := Tx("Starts at {1}", FormatTime(startAtNext, "h:mm tt")) "   |   " stopLine
+        timerTxt := "⏰ " Tx("Starts at {1}", FormatTime(startAtNext, "h:mm tt"))
+    } else {
+        timerTxt := "⏹ " Tx("Stop: {1}", DescribeStop())
     }
     if (ActionIndex(S["STOP_ACTION"]) > 1)
-        stopLine .= ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"])))
+        timerTxt .= ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"])))
+    if (OV["bar"].Value != pct)
+        OV["bar"].Value := pct
+    SetIfChanged(OV["timer"], timerTxt)
+    runTxt := "🎮 " matches " " Tx("this run")
+    if (lastPlace != "")
+        runTxt .= "     🏆 #" lastPlace
+    if (lastXP != "")
+        runTxt .= "     ⭐ " FormatNumber(lastXP) " XP"
+    SetIfChanged(OV["run"], runTxt)
     mins := totalMinutes + (running ? (A_TickCount - sessionStart) / 60000 : 0)
-    allTime := Tx("All time: {1} matches, {2}h {3}m", totalMatches, Floor(mins / 60), Mod(Floor(mins), 60))
-    statusTxt.Value := TITLE ": " head "`n" lastMsg "`n" stopLine "`n" allTime
+    SetIfChanged(OV["total"], "📊 " Tx("All time: {1} matches, {2}h {3}m", totalMatches, Floor(mins / 60), Mod(Floor(mins), 60)))
+}
+
+SetIfChanged(ctrl, text) {
+    if (ctrl.Value != text)
+        ctrl.Value := text
 }
 
 CanAct() {
