@@ -28,6 +28,7 @@ CHANGELOG := [
     "    Discord alerts, Phone control, Look)",
     "  + Step-by-step guides for the Discord webhook and the phone-control bot",
     "  + Status box corner and size can be changed in Settings > Look",
+    "  + Hotkeys section in Settings: change Lobby Loop's keys and your Fortnite keys",
     "  + Setup wizard and What's new use the same theme",
     "",
     "v7.0.2  (17 Nov 2026)",
@@ -301,6 +302,11 @@ PROFILES := Map(
                      "JUMP_CHANCE", 15, "SPRINT_CHANCE", 15)
 )
 PROFILE_KEYS := ["overnight", "quick", "chill", "custom"]
+HOTKEY_FIELDS := [["HOTKEY_TOGGLE", "Start / Stop"], ["HOTKEY_SETTINGS", "Settings"], ["HOTKEY_TEST", "Self-test"],
+                  ["HOTKEY_BLACKOUT", "Dim screen"], ["HOTKEY_OVERLAY", "Show / hide status box"],
+                  ["HOTKEY_TEACH", "Teach a popup button"], ["HOTKEY_EXIT", "Exit"]]
+GAMEKEY_FIELDS := [["KEY_FORWARD", "Forward"], ["KEY_LEFT", "Left"], ["KEY_BACK", "Back"], ["KEY_RIGHT", "Right"],
+                   ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"], ["KEY_SLOTS", "Weapon slots"]]
 
 ; ---------- Button detection ----------
 SCALE := Min(A_ScreenWidth / 2560, A_ScreenHeight / 1440)   ; works for 16:9, 16:10 and 21:9
@@ -425,6 +431,20 @@ RegisterHotkey(setting, fallback, fn) {
         Hotkey(fallback, fn)
         return fallback
     }
+}
+
+; "F8", "^!s", "+Insert", "Numpad0" ... (modifier symbols, then one key)
+ValidHotkey(hk) {
+    hk := Trim(String(hk))
+    if (hk = "")
+        return false
+    if InStr(hk, " & ") {
+        parts := StrSplit(hk, " & ")
+        return parts.Length = 2 && ValidKey(parts[1]) && ValidKey(RegExReplace(parts[2], "i)\s+up$"))
+    }
+    if !RegExMatch(hk, "^[#!^+<>*~$]*(.+?)(?:\s+up)?$", &m)
+        return false
+    return ValidKey(m[1])
 }
 
 ValidKey(keyName) {
@@ -694,7 +714,7 @@ OpenSettings() {
     g.Add("Text", "x0 y0 w200 h560 Background" UiCol("side"))
     UiText(g, "x20 y20 w170", "🔁 " TITLE, "head", UiCol("side"))
     UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
-    sections := [["🎮", "Play"], ["⏰", "Schedule"], ["✨", "Extras"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"]]
+    sections := [["🎮", "Play"], ["⏰", "Schedule"], ["✨", "Extras"], ["⌨️", "Hotkeys"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"]]
     for i, sec in sections {
         n := g.Add("Text", "x10 y" (90 + (i - 1) * 46) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
         n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
@@ -751,7 +771,21 @@ OpenSettings() {
         first := false
     }
 
-    ; ---- 4. Discord alerts ----
+    ; ---- 4. Hotkeys ----
+    newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
+    add(UiText(g, "x" CX " y+16 w220 Section", Tx("Lobby Loop keys"), "head"))
+    for i, pair in HOTKEY_FIELDS {
+        add(UiText(g, "xs y+" (i = 1 ? 10 : 8) " w135", Tx(pair[2])))
+        c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w80 r1", S[pair[1]]))
+    }
+    add(UiText(g, "xs+245 ys w220", Tx("Your Fortnite keys"), "head"))
+    for i, pair in GAMEKEY_FIELDS {
+        add(UiText(g, "xs+245 y+" (i = 1 ? 10 : 8) " w110", Tx(pair[2])))
+        c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w105 r1", S[pair[1]]))
+    }
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Examples: F8, Insert, Numpad0, ^!s (Ctrl+Alt+S), +F8 (Shift+F8). Lobby Loop restarts after you save."), "muted"))
+
+    ; ---- 5. Discord alerts ----
     newPage(Tx("Discord alerts"), Tx("Messages, screenshots and a daily summary in your channel."))
     add(UiText(g, "x" CX " y+18 w" CW, Tx("Discord alert link (optional):")))
     c["HOOK"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", DiscordUrl()))
@@ -763,7 +797,7 @@ OpenSettings() {
     add(UiText(g, "x" CX " y+16 w" CW, Tx("Daily Discord summary at (blank = off):")))
     c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200", ClockText(S["DAILY_SUMMARY_TIME"])))
 
-    ; ---- 5. Phone control ----
+    ; ---- 6. Phone control ----
     newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
     hb2 := add(UiButton(g, "x" CX " y+14 w240", "❓ " Tx("How do I set this up?")))
     hb2.OnEvent("Click", (*) => ShowGuide("bot", g.Hwnd))
@@ -775,7 +809,7 @@ OpenSettings() {
     c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
     add(UiText(g, "x" CX " y+10 w" CW, "!start  !stop  !status  !ss  !log  !summary  !lb  !dim", "muted"))
 
-    ; ---- 6. Look ----
+    ; ---- 7. Look ----
     newPage(Tx("Look"), Tx("Language, theme and the status box."))
     add(UiText(g, "x" CX " y+18 w" CW, Tx("Language")))
     c["LANG"] := add(UiDDL(g, "x" CX " y+4 w220", ["English", "العربية"]))
@@ -859,6 +893,27 @@ SaveSettingsGui(g, c) {
     hook := Trim(c["HOOK"].Value)
     if (hook != "" && !IsDiscordUrl(hook))
         return bad("That doesn't look like a Discord webhook link.`nIt should start with https://discord.com/api/webhooks/")
+    ; hotkeys and game keys
+    keysChanged := false
+    seenHk := Map()
+    for pair in HOTKEY_FIELDS {
+        v := Trim(c[pair[1]].Value)
+        if !ValidHotkey(v)
+            return bad("'" v "' can't be used as the " Tx(pair[2]) " key.`n`nExamples: F8, Insert, Numpad0, ^!s, +F8")
+        if seenHk.Has(StrLower(v))
+            return bad("'" v "' is used for two Lobby Loop keys. Pick a different key for one of them.")
+        seenHk[StrLower(v)] := true
+    }
+    for pair in GAMEKEY_FIELDS {
+        v := Trim(c[pair[1]].Value)
+        if (pair[1] = "KEY_SLOTS") {
+            for slot in StrSplit(v, ",", " `t")
+                if !ValidKey(slot)
+                    return bad("'" slot "' isn't a key name (weapon slots look like: 1,2,3,4,5).")
+        } else if !ValidKey(v) {
+            return bad("'" v "' isn't a key name AutoHotkey knows (examples: w, Space, LShift, LCtrl).")
+        }
+    }
     channel := Trim(c["CHANNEL"].Value)
     if (channel != "" && !RegExMatch(channel, "^\d{15,22}$"))
         return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
@@ -883,10 +938,20 @@ SaveSettingsGui(g, c) {
     SetSetting("DISCORD_BOT_TOKEN", Trim(c["TOKEN"].Value))
     SetSetting("DISCORD_CHANNEL_ID", channel)
     SetSetting("DISCORD_ALLOWED_IDS", Trim(c["ALLOWED"].Value))
+    for pair in HOTKEY_FIELDS
+        if (Trim(c[pair[1]].Value) != String(S[pair[1]])) {
+            SetSetting(pair[1], Trim(c[pair[1]].Value))
+            keysChanged := true
+        }
+    for pair in GAMEKEY_FIELDS
+        if (Trim(c[pair[1]].Value) != String(S[pair[1]])) {
+            SetSetting(pair[1], Trim(c[pair[1]].Value))
+            keysChanged := true
+        }
     newLang := (c["LANG"].Value = 2) ? "ar" : "en"
     newTheme := (c["THEME"].Value = 2) ? "light" : "dark"
     newSize := ["small", "normal", "large"][c["SIZE"].Value]
-    needReload := (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
+    needReload := keysChanged || (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
     SetSetting("LANG", newLang)
     SetSetting("THEME", newTheme)
     SetSetting("OVERLAY_SIZE", newSize)
@@ -1588,6 +1653,13 @@ GuiOpts(extra := "") {
 LoadTranslations() {
     return Map(
         "Start / Stop", "تشغيل / إيقاف",
+        "Hotkeys", "مفاتيح الاختصار",
+        "Change the keys if they clash with your game or keyboard.", "غيّر المفاتيح إن تعارضت مع لعبتك أو لوحة المفاتيح.",
+        "Lobby Loop keys", "مفاتيح Lobby Loop",
+        "Your Fortnite keys", "مفاتيح Fortnite الخاصة بك",
+        "Teach a popup button", "تعليم زر نافذة منبثقة",
+        "Weapon slots", "خانات الأسلحة",
+        "Examples: F8, Insert, Numpad0, ^!s (Ctrl+Alt+S), +F8 (Shift+F8). Lobby Loop restarts after you save.", "أمثلة: F8، Insert، Numpad0، ^!s (Ctrl+Alt+S)، +F8 (Shift+F8). يُعاد تشغيل Lobby Loop بعد الحفظ.",
         "Play", "اللعب",
         "Schedule", "الجدولة",
         "Discord alerts", "تنبيهات Discord",
