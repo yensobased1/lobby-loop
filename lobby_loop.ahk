@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.0.2
+;@Ahk2Exe-SetVersion 7.1.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.0.2"
+VERSION := "7.1"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,14 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.1  (17 Nov 2026)",
+    "  + Dark mode (Settings > Look), with a dark title bar",
+    "  + New Settings window: sidebar with sections (Play, Schedule, Extras,",
+    "    Discord alerts, Phone control, Look)",
+    "  + Step-by-step guides for the Discord webhook and the phone-control bot",
+    "  + Status box corner and size can be changed in Settings > Look",
+    "  + Setup wizard and What's new use the same theme",
+    "",
     "v7.0.2  (17 Nov 2026)",
     "  * Settings window: fixed overlapping columns and cut-off text",
     "  * Status box shows again (it was hidden on some PCs)",
@@ -145,6 +153,7 @@ DEFAULTS := [
     ["DISCORD_BOT_TOKEN", "", "Discord bot token for phone control (blank = off). Never share it"],
     ["DISCORD_CHANNEL_ID", "", "Discord channel ID the bot listens to"],
     ["DISCORD_ALLOWED_IDS", "", "Discord user IDs allowed to send commands, comma separated (blank = anyone)"],
+    ["THEME", "dark", "Window theme: dark or light"],
     ["OVERLAY_CORNER", "top-left", "Status box corner: top-left, top-right, bottom-left, bottom-right"],
     ["OVERLAY_SIZE", "normal", "Status box size: small, normal or large"],
     ["AUTO_START", 0, "1 = start by itself when you click into Fortnite"],
@@ -540,11 +549,11 @@ ShowWhatsNew() {
     txt := ""
     for line in CHANGELOG
         txt .= line "`r`n"
-    g := Gui("+AlwaysOnTop", TITLE " v" VERSION " - What's new")
-    g.SetFont("s10", "Consolas")
-    g.Add("Edit", "w680 h460 ReadOnly VScroll", txt)
-    g.SetFont("s10", "Segoe UI")
-    okBtn := g.Add("Button", "w100 Default", "OK")
+    g := ThemeGui(TITLE " v" VERSION " - " Tx("What's new"))
+    g.SetFont("s10 c" UiCol("text"), "Consolas")
+    UiEdit(g, "w680 h460 ReadOnly VScroll", txt)
+    g.SetFont("s10 c" UiCol("text"), "Segoe UI")
+    okBtn := UiButton(g, "w110 Default", "OK")
     okBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
     g.OnEvent("Close", (*) => g.Destroy())
@@ -555,84 +564,263 @@ ShowWhatsNew() {
 ; ============================================================
 ; Settings window
 ; ============================================================
-OpenSettings() {
-    g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " Tx("Settings"))
-    g.SetFont("s10", "Segoe UI")
-    c := Map()
-    W := 400                                        ; column width
+; ============================================================
+; Look and feel (dark / light theme)
+; ============================================================
+DarkOn() {
+    return S["THEME"] != "light"
+}
 
-    ; ---- left column: playing ----
-    g.Add("Text", "xm ym Section w" W, Tx("Profile"))
-    c["PROFILE"] := g.Add("DropDownList", "w" W, [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")])
-    c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
+; Colours for the current theme
+UiCol(name) {
+    static dark := Map("bg", "16162A", "side", "1F1F3D", "sel", "3B2F80", "text", "ECECF4", "muted", "9494B8",
+                       "accent", "F7FE19", "edit", "26264A", "line", "33335C")
+    static light := Map("bg", "F7F7FB", "side", "ECECF6", "sel", "D9D3FF", "text", "1B1B2F", "muted", "6B6B85",
+                        "accent", "5B34D6", "edit", "FFFFFF", "line", "DDDDEA")
+    return DarkOn() ? dark[name] : light[name]
+}
 
-    g.Add("Text", "y+14 w" W, Tx("Stop after a time, or at a clock time:"))
-    Hint(g, Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"), W)
-    c["STOP"] := g.Add("Edit", "w" W, CurrentStopText())
+ThemeGui(title, opts := "+AlwaysOnTop") {
+    g := Gui(GuiOpts(opts), title)
+    g.BackColor := UiCol("bg")
+    g.SetFont("s10 c" UiCol("text"), "Segoe UI")
+    g.MarginX := 20, g.MarginY := 16
+    if DarkOn()
+        DarkTitleBar(g.Hwnd)
+    return g
+}
 
-    g.Add("Text", "y+14 w" W, Tx("When it stops:"))
-    c["ACTION"] := g.Add("DropDownList", "w" W, ActionLabels())
-    c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
-    Hint(g, Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE), W)
+DarkTitleBar(hwnd) {
+    v := Buffer(4, 0)
+    NumPut("Int", 1, v)
+    if (DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 20, "Ptr", v, "Int", 4) != 0)
+        DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", hwnd, "Int", 19, "Ptr", v, "Int", 4)
+}
 
-    g.Add("Text", "y+14 w" W, Tx("Start every day at:"))
-    Hint(g, Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"), W)
-    c["START"] := g.Add("Edit", "w" W, ClockText(S["START_AT_TIME"]))
+DarkControl(ctrl, themeName := "DarkMode_Explorer") {
+    if DarkOn()
+        DllCall("uxtheme\SetWindowTheme", "Ptr", ctrl.Hwnd, "Str", themeName, "Ptr", 0)
+    return ctrl
+}
 
-    first := true
-    for pair in [["AUTO_START", "Start by itself when I click into Fortnite"], ["LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)"],
-                 ["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
-                 ["READ_RESULTS", "Read my placement and XP after each match"], ["START_WITH_WINDOWS", "Start with Windows"]] {
-        c[pair[1]] := g.Add("Checkbox", "w" W (first ? " y+16" : " y+6"), Tx(pair[2]))
-        c[pair[1]].Value := S[pair[1]] ? 1 : 0
-        first := false
+UiText(g, opts, text, style := "", bg := "Trans") {
+    g.SetFont(style = "title" ? "s15 bold c" UiCol("text") : style = "head" ? "s11 bold c" UiCol("text")
+             : style = "muted" ? "s9 norm c" UiCol("muted") : style = "accent" ? "s10 bold c" UiCol("accent") : "s10 norm c" UiCol("text"))
+    t := g.Add("Text", opts " Background" bg, text)
+    g.SetFont("s10 norm c" UiCol("text"))
+    return t
+}
+
+UiEdit(g, opts, text := "") {
+    return g.Add("Edit", opts " -E0x200 Border Background" UiCol("edit") " c" UiCol("text"), text)
+}
+
+UiDDL(g, opts, items) {
+    return DarkControl(g.Add("DropDownList", opts, items), "DarkMode_CFD")
+}
+
+UiButton(g, opts, text) {
+    return DarkControl(g.Add("Button", opts, text))
+}
+
+; A tick box with its own label, so the label can use the theme colour. Returns [box, label].
+UiCheck(g, opts, label, value, width := 440) {
+    cb := DarkControl(g.Add("Checkbox", opts " w18 h20"))
+    cb.Value := value ? 1 : 0
+    lbl := UiText(g, "x+6 yp+1 w" width, label)
+    lbl.OnEvent("Click", (*) => (cb.Value := !cb.Value))
+    return [cb, lbl]
+}
+
+; ============================================================
+; Discord how-to guides
+; ============================================================
+ShowGuide(kind, owner := "") {
+    if (kind = "bot") {
+        head := Tx("Phone control setup (about 5 minutes)")
+        steps := [
+            Tx("Click 'Open Developer Portal' below, then New Application, and name it Lobby Loop."),
+            Tx("Click Bot (left menu), then Reset Token, then Copy. Paste it into 'Bot token'. Never share it."),
+            Tx("On the same Bot page, turn on 'Message Content Intent' and click Save Changes."),
+            Tx("Click OAuth2, then URL Generator. Tick 'bot', then Send Messages, Read Message History and Attach Files."),
+            Tx("Open the link at the bottom of that page and add the bot to your server."),
+            Tx("In Discord: User Settings, Advanced, turn on Developer Mode."),
+            Tx("Right-click your channel and Copy Channel ID. Right-click your name and Copy User ID. Paste both here."),
+            Tx("Click Save, then type !status in the channel. Lobby Loop answers in a few seconds.")
+        ]
+        foot := Tx("Commands: !start  !stop  !status  !ss (screenshot)  !log  !summary  !lb (leaderboard)  !dim. Add a name to control one PC, e.g. !stop zen")
+    } else {
+        head := Tx("Discord alerts setup (about 1 minute)")
+        steps := [
+            Tx("In Discord, right-click the channel for alerts and click Edit Channel."),
+            Tx("Click Integrations, then Webhooks, then New Webhook."),
+            Tx("Click the new webhook, then Copy Webhook URL."),
+            Tx("Paste it into 'Discord alert link', click Send test message, then Save."),
+            Tx("Lobby Loop sets the webhook's name and picture for you.")
+        ]
+        foot := Tx("Keep the link private: anyone who has it can post in your channel.")
     }
-
-    g.Add("Text", "y+16 w" W, Tx("Language"))
-    c["LANG"] := g.Add("DropDownList", "w200", ["English", "العربية"])
-    c["LANG"].Choose(IsArabic() ? 2 : 1)
-    lastLeft := c["LANG"]
-
-    ; ---- right column: Discord (fixed position, so it never overlaps the left column) ----
-    g.Add("Text", "xs+" (W + 40) " ys w" W, Tx("Your name (for Discord and the leaderboard):"))
-    c["PLAYER_NAME"] := g.Add("Edit", "w" W, PlayerName())
-
-    g.Add("Text", "y+14 w" W, Tx("Discord alert link (optional):"))
-    Hint(g, Tx("Paste your Discord webhook link here. Blank = no alerts."), W)
-    c["HOOK"] := g.Add("Edit", "w" W " r1", DiscordUrl())
-    testBtn := g.Add("Button", "y+8 w200", Tx("Send test message"))
-    testBtn.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
-
-    c["SCREENSHOT_EVERY_MATCH"] := g.Add("Checkbox", "y+14 w" W, Tx("Screenshot to Discord after every match"))
-    c["SCREENSHOT_EVERY_MATCH"].Value := S["SCREENSHOT_EVERY_MATCH"] ? 1 : 0
-    g.Add("Text", "y+14 w" W, Tx("Daily Discord summary at (blank = off):"))
-    c["SUMMARY"] := g.Add("Edit", "w200", ClockText(S["DAILY_SUMMARY_TIME"]))
-
-    g.Add("Text", "y+20 w" W, Tx("Phone control (Discord bot, optional):"))
-    Hint(g, Tx("Bot token"), W)
-    c["TOKEN"] := g.Add("Edit", "w" W " r1 Password", S["DISCORD_BOT_TOKEN"])
-    Hint(g, Tx("Channel ID"), W)
-    c["CHANNEL"] := g.Add("Edit", "w" W " r1", S["DISCORD_CHANNEL_ID"])
-    Hint(g, Tx("Your Discord user ID (only you can control it)"), W)
-    c["ALLOWED"] := g.Add("Edit", "w" W " r1", S["DISCORD_ALLOWED_IDS"])
-    lastRight := c["ALLOWED"]
-
-    ; ---- buttons under whichever column is taller ----
-    lastLeft.GetPos(, &y1, , &h1)
-    lastRight.GetPos(, &y2, , &h2)
-    by := Max(y1 + h1, y2 + h2) + 24
-    saveBtn := g.Add("Button", "xm y" by " w120 Default", Tx("Save"))
-    saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
-    cancelBtn := g.Add("Button", "x+10 yp w120", Tx("Cancel"))
-    cancelBtn.OnEvent("Click", (*) => g.Destroy())
+    g := ThemeGui(TITLE " - Discord", "+AlwaysOnTop" (owner != "" ? " +Owner" owner : ""))
+    UiText(g, "w560", head, "title")
+    for i, st in steps {
+        UiText(g, "xm y+12 w26", i ".", "accent")
+        UiText(g, "x+6 yp w530", st)
+    }
+    UiText(g, "xm y+18 w560", foot, "muted")
+    if (kind = "bot") {
+        portal := UiButton(g, "xm y+18 w220", Tx("Open Developer Portal"))
+        portal.OnEvent("Click", (*) => Run("https://discord.com/developers/applications"))
+        okBtn := UiButton(g, "x+10 w110 Default", "OK")
+    } else {
+        okBtn := UiButton(g, "xm y+18 w110 Default", "OK")
+    }
+    okBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
     g.Show()
 }
 
-Hint(g, text, width := 400) {
-    g.SetFont("s9 cGray")
-    g.Add("Text", "y+2 w" width, text)
-    g.SetFont("s10 cDefault")
+; ============================================================
+; Settings window: sidebar with sections
+; ============================================================
+OpenSettings() {
+    g := ThemeGui(TITLE " - " Tx("Settings"))
+    c := Map()
+    pages := []
+    navs := []
+    CW := 470                                         ; content width
+    CX := 230                                         ; content left edge
+
+    ; sidebar
+    g.Add("Text", "x0 y0 w200 h560 Background" UiCol("side"))
+    UiText(g, "x20 y20 w170", "🔁 " TITLE, "head", UiCol("side"))
+    UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
+    sections := [["🎮", "Play"], ["⏰", "Schedule"], ["✨", "Extras"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"]]
+    for i, sec in sections {
+        n := g.Add("Text", "x10 y" (90 + (i - 1) * 46) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
+        n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
+        navs.Push(n)
+    }
+
+    ; helpers that add controls to the newest page
+    add(ctrl) => (pages[pages.Length].Push(ctrl), ctrl)
+    addAll(arr) {
+        for x in arr
+            pages[pages.Length].Push(x)
+        return arr[1]
+    }
+    newPage(title, sub := "") {
+        pages.Push([])
+        add(UiText(g, "x" CX " y22 w" CW, title, "title"))
+        if (sub != "")
+            add(UiText(g, "x" CX " y+2 w" CW, sub, "muted"))
+    }
+
+    ; ---- 1. Play ----
+    newPage(Tx("Play"), Tx("How long it runs and what happens after."))
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("Profile")))
+    c["PROFILE"] := add(UiDDL(g, "x" CX " y+4 w" CW, [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")]))
+    c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Stop after a time, or at a clock time:")))
+    c["STOP"] := add(UiEdit(g, "x" CX " y+4 w" CW, CurrentStopText()))
+    add(UiText(g, "x" CX " y+3 w" CW, Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"), "muted"))
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("When it stops:")))
+    c["ACTION"] := add(UiDDL(g, "x" CX " y+4 w" CW, ActionLabels()))
+    c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
+    add(UiText(g, "x" CX " y+3 w" CW, Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE), "muted"))
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Your name (for Discord and the leaderboard):")))
+    c["PLAYER_NAME"] := add(UiEdit(g, "x" CX " y+4 w" CW, PlayerName()))
+
+    ; ---- 2. Schedule ----
+    newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows."))
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("Start every day at:")))
+    c["START"] := add(UiEdit(g, "x" CX " y+4 w200", ClockText(S["START_AT_TIME"])))
+    add(UiText(g, "x" CX " y+3 w" CW, Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"), "muted"))
+    first := true
+    for pair in [["AUTO_START", "Start by itself when I click into Fortnite"], ["LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)"],
+                 ["START_WITH_WINDOWS", "Start with Windows"]] {
+        c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+18" : " y+10"), Tx(pair[2]), S[pair[1]], CW - 30))
+        first := false
+    }
+
+    ; ---- 3. Extras ----
+    newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
+    first := true
+    for pair in [["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
+                 ["READ_RESULTS", "Read my placement and XP after each match"]] {
+        c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+18" : " y+10"), Tx(pair[2]), S[pair[1]], CW - 30))
+        first := false
+    }
+
+    ; ---- 4. Discord alerts ----
+    newPage(Tx("Discord alerts"), Tx("Messages, screenshots and a daily summary in your channel."))
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("Discord alert link (optional):")))
+    c["HOOK"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", DiscordUrl()))
+    tb := add(UiButton(g, "x" CX " y+10 w190", Tx("Send test message")))
+    tb.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
+    hb := add(UiButton(g, "x+10 yp w190", "❓ " Tx("How do I get this?")))
+    hb.OnEvent("Click", (*) => ShowGuide("webhook", g.Hwnd))
+    c["SCREENSHOT_EVERY_MATCH"] := addAll(UiCheck(g, "x" CX " y+18", Tx("Screenshot to Discord after every match"), S["SCREENSHOT_EVERY_MATCH"], CW - 30))
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Daily Discord summary at (blank = off):")))
+    c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200", ClockText(S["DAILY_SUMMARY_TIME"])))
+
+    ; ---- 5. Phone control ----
+    newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
+    hb2 := add(UiButton(g, "x" CX " y+14 w240", "❓ " Tx("How do I set this up?")))
+    hb2.OnEvent("Click", (*) => ShowGuide("bot", g.Hwnd))
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Bot token")))
+    c["TOKEN"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1 Password", S["DISCORD_BOT_TOKEN"]))
+    add(UiText(g, "x" CX " y+12 w" CW, Tx("Channel ID")))
+    c["CHANNEL"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_CHANNEL_ID"]))
+    add(UiText(g, "x" CX " y+12 w" CW, Tx("Your Discord user ID (only you can control it)")))
+    c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
+    add(UiText(g, "x" CX " y+10 w" CW, "!start  !stop  !status  !ss  !log  !summary  !lb  !dim", "muted"))
+
+    ; ---- 6. Look ----
+    newPage(Tx("Look"), Tx("Language, theme and the status box."))
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("Language")))
+    c["LANG"] := add(UiDDL(g, "x" CX " y+4 w220", ["English", "العربية"]))
+    c["LANG"].Choose(IsArabic() ? 2 : 1)
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Theme")))
+    c["THEME"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Dark"), Tx("Light")]))
+    c["THEME"].Choose(DarkOn() ? 1 : 2)
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Status box corner")))
+    corners := ["top-left", "top-right", "bottom-left", "bottom-right"]
+    c["CORNER"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right")]))
+    ci := 1
+    for i, k in corners
+        if (k = StrLower(S["OVERLAY_CORNER"]))
+            ci := i
+    c["CORNER"].Choose(ci)
+    add(UiText(g, "x" CX " y+16 w" CW, Tx("Status box size")))
+    sizes := ["small", "normal", "large"]
+    c["SIZE"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Small"), Tx("Normal"), Tx("Large")]))
+    si := 2
+    for i, k in sizes
+        if (k = StrLower(S["OVERLAY_SIZE"]))
+            si := i
+    c["SIZE"].Choose(si)
+
+    ; ---- bottom bar ----
+    g.Add("Text", "x" CX " y492 w" CW " h1 Background" UiCol("line"))
+    saveBtn := UiButton(g, "x" (CX + CW - 230) " y506 w110 Default", Tx("Save"))
+    saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
+    cancelBtn := UiButton(g, "x+10 yp w110", Tx("Cancel"))
+    cancelBtn.OnEvent("Click", (*) => g.Destroy())
+    g.OnEvent("Escape", (*) => g.Destroy())
+
+    SettingsNav(1, pages, navs)
+    g.Show("w" (CX + CW + 30) " h556")
+}
+
+SettingsNav(index, pages, navs, *) {
+    for i, pg in pages
+        for ctrl in pg
+            ctrl.Visible := (i = index)
+    for i, n in navs {
+        n.Opt("Background" (i = index ? UiCol("sel") : UiCol("side")))
+        n.SetFont(i = index ? "bold" : "norm")
+        n.Redraw()
+    }
 }
 
 ProfileIndex(key) {
@@ -696,16 +884,22 @@ SaveSettingsGui(g, c) {
     SetSetting("DISCORD_CHANNEL_ID", channel)
     SetSetting("DISCORD_ALLOWED_IDS", Trim(c["ALLOWED"].Value))
     newLang := (c["LANG"].Value = 2) ? "ar" : "en"
-    langChanged := (newLang != S["LANG"])
+    newTheme := (c["THEME"].Value = 2) ? "light" : "dark"
+    newSize := ["small", "normal", "large"][c["SIZE"].Value]
+    needReload := (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
     SetSetting("LANG", newLang)
+    SetSetting("THEME", newTheme)
+    SetSetting("OVERLAY_SIZE", newSize)
+    SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right"][c["CORNER"].Value])
     g.Destroy()
     botLastId := "", botFails := 0
     if running
         ApplyStopLimits()
     ApplyStartSchedule()
+    PlaceOverlay()
     Log("Settings saved. Profile: " S["PROFILE"] ", start: " DescribeStart() ", stop: " DescribeStop() ", action: " S["STOP_ACTION"])
-    if langChanged {
-        Reload()                                       ; redraw everything in the new language
+    if needReload {
+        Reload()                                       ; redraw everything in the new language / theme / size
         return
     }
     ShowTip(Tx("Saved.") "`n" Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
@@ -1394,6 +1588,49 @@ GuiOpts(extra := "") {
 LoadTranslations() {
     return Map(
         "Start / Stop", "تشغيل / إيقاف",
+        "Play", "اللعب",
+        "Schedule", "الجدولة",
+        "Discord alerts", "تنبيهات Discord",
+        "Phone control", "التحكم من الهاتف",
+        "Look", "المظهر",
+        "How long it runs and what happens after.", "مدة التشغيل وما يحدث بعدها.",
+        "Start by itself, every day or with Windows.", "التشغيل تلقائيًا، كل يوم أو مع Windows.",
+        "Comfort and stats while it runs.", "راحة وإحصائيات أثناء التشغيل.",
+        "Messages, screenshots and a daily summary in your channel.", "رسائل ولقطات شاشة وملخص يومي في قناتك.",
+        "Control Lobby Loop from Discord on your phone (optional).", "تحكم في Lobby Loop من Discord على هاتفك (اختياري).",
+        "Language, theme and the status box.", "اللغة والمظهر وصندوق الحالة.",
+        "Theme", "المظهر",
+        "Dark", "داكن",
+        "Light", "فاتح",
+        "Status box corner", "زاوية صندوق الحالة",
+        "Top left", "أعلى اليسار",
+        "Top right", "أعلى اليمين",
+        "Bottom left", "أسفل اليسار",
+        "Bottom right", "أسفل اليمين",
+        "Status box size", "حجم صندوق الحالة",
+        "Small", "صغير",
+        "Normal", "عادي",
+        "Large", "كبير",
+        "How do I get this?", "كيف أحصل عليه؟",
+        "How do I set this up?", "كيف أعد هذا؟",
+        "Open Developer Portal", "فتح بوابة المطورين",
+        "Phone control setup (about 5 minutes)", "إعداد التحكم من الهاتف (حوالي 5 دقائق)",
+        "Discord alerts setup (about 1 minute)", "إعداد تنبيهات Discord (حوالي دقيقة)",
+        "Click 'Open Developer Portal' below, then New Application, and name it Lobby Loop.", "اضغط 'فتح بوابة المطورين' بالأسفل، ثم New Application، وسمّه Lobby Loop.",
+        "Click Bot (left menu), then Reset Token, then Copy. Paste it into 'Bot token'. Never share it.", "اضغط Bot (القائمة اليسرى)، ثم Reset Token، ثم Copy. الصقه في 'رمز البوت'. لا تشاركه أبدًا.",
+        "On the same Bot page, turn on 'Message Content Intent' and click Save Changes.", "في نفس صفحة Bot، فعّل 'Message Content Intent' واضغط Save Changes.",
+        "Click OAuth2, then URL Generator. Tick 'bot', then Send Messages, Read Message History and Attach Files.", "اضغط OAuth2، ثم URL Generator. حدد 'bot'، ثم Send Messages و Read Message History و Attach Files.",
+        "Open the link at the bottom of that page and add the bot to your server.", "افتح الرابط أسفل تلك الصفحة وأضف البوت إلى خادمك.",
+        "In Discord: User Settings, Advanced, turn on Developer Mode.", "في Discord: إعدادات المستخدم، Advanced، فعّل Developer Mode.",
+        "Right-click your channel and Copy Channel ID. Right-click your name and Copy User ID. Paste both here.", "اضغط بزر الفأرة الأيمن على قناتك واختر Copy Channel ID. ثم على اسمك واختر Copy User ID. الصق الاثنين هنا.",
+        "Click Save, then type !status in the channel. Lobby Loop answers in a few seconds.", "اضغط حفظ، ثم اكتب !status في القناة. سيرد Lobby Loop خلال ثوانٍ.",
+        "Commands: !start  !stop  !status  !ss (screenshot)  !log  !summary  !lb (leaderboard)  !dim. Add a name to control one PC, e.g. !stop zen", "الأوامر: !start  !stop  !status  !ss (لقطة شاشة)  !log  !summary  !lb (المتصدرين)  !dim. أضف اسمًا للتحكم بجهاز واحد، مثل !stop zen",
+        "In Discord, right-click the channel for alerts and click Edit Channel.", "في Discord، اضغط بزر الفأرة الأيمن على قناة التنبيهات واختر Edit Channel.",
+        "Click Integrations, then Webhooks, then New Webhook.", "اضغط Integrations، ثم Webhooks، ثم New Webhook.",
+        "Click the new webhook, then Copy Webhook URL.", "اضغط على الـ Webhook الجديد، ثم Copy Webhook URL.",
+        "Paste it into 'Discord alert link', click Send test message, then Save.", "الصقه في 'رابط تنبيهات Discord'، اضغط إرسال رسالة تجريبية، ثم حفظ.",
+        "Lobby Loop sets the webhook's name and picture for you.", "يضبط Lobby Loop اسم وصورة الـ Webhook تلقائيًا.",
+        "Keep the link private: anyone who has it can post in your channel.", "احتفظ بالرابط سرًا: أي شخص يملكه يمكنه النشر في قناتك.",
         "Settings", "الإعدادات",
         "Self-test", "فحص",
         "Setup wizard", "معالج الإعداد",
@@ -2290,11 +2527,9 @@ WizardPage() {
     global WIZ
     page := WIZ["page"], pages := 6
     S["LANG"] := WIZ["LANG"]                         ; show the wizard in the chosen language
-    g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " Tx("Setup wizard"))
-    g.SetFont("s10", "Segoe UI")
-    g.SetFont("s9 cGray")
-    g.Add("Text", "w460", Tx("Step {1} of {2}", page, pages))
-    g.SetFont("s14 bold cDefault")
+    g := ThemeGui(TITLE " - " Tx("Setup wizard"))
+    UiText(g, "w460", Tx("Step {1} of {2}", page, pages), "muted")
+    g.SetFont("s14 bold c" UiCol("text"))
     ctrls := Map()
     switch page {
         case 1:
@@ -2302,10 +2537,10 @@ WizardPage() {
             g.SetFont("s10 norm")
             g.Add("Text", "w460 y+10", Tx("Pick your language and your name."))
             g.Add("Text", "y+12", Tx("Language"))
-            ctrls["LANG"] := g.Add("DropDownList", "w220", ["English", "العربية"])
+            ctrls["LANG"] := UiDDL(g, "w220", ["English", "العربية"])
             ctrls["LANG"].Choose(WIZ["LANG"] = "ar" ? 2 : 1)
             g.Add("Text", "y+12 w460", Tx("Your name (for Discord and the leaderboard):"))
-            ctrls["PLAYER_NAME"] := g.Add("Edit", "w220", WIZ["PLAYER_NAME"] != "" ? WIZ["PLAYER_NAME"] : A_UserName)
+            ctrls["PLAYER_NAME"] := UiEdit(g, "w220", WIZ["PLAYER_NAME"] != "" ? WIZ["PLAYER_NAME"] : A_UserName)
         case 2:
             g.Add("Text", "w460 y+6", Tx("How do you want to play?"))
             g.SetFont("s10 norm")
@@ -2315,6 +2550,8 @@ WizardPage() {
                          "custom", "Custom: keep my own settings")
             for i, key in PROFILE_KEYS {
                 rb := g.Add("Radio", "w460 y+10" (i = 1 ? " Group" : ""), Tx(descs[key]))
+                if DarkOn()
+                    DllCall("uxtheme\SetWindowTheme", "Ptr", rb.Hwnd, "Str", "", "Str", "")   ; lets the text use the theme colour
                 rb.Value := (WIZ["PROFILE"] = key)
                 ctrls["P_" key] := rb
             }
@@ -2324,24 +2561,24 @@ WizardPage() {
             for pair in [["KEY_FORWARD", "Forward"], ["KEY_LEFT", "Left"], ["KEY_BACK", "Back"], ["KEY_RIGHT", "Right"],
                          ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"]] {
                 g.Add("Text", "xm w120 y+8", Tx(pair[2]))
-                ctrls[pair[1]] := g.Add("Edit", "x+10 yp-3 w120", WIZ[pair[1]])
+                ctrls[pair[1]] := UiEdit(g, "x+10 yp-3 w120", WIZ[pair[1]])
             }
         case 4:
             g.Add("Text", "w460 y+6", "Discord")
             g.SetFont("s10 norm")
             g.Add("Text", "w460 y+10", Tx("Discord alerts (optional). Leave blank to skip."))
-            ctrls["DISCORD_WEBHOOK"] := g.Add("Edit", "w460", WIZ["DISCORD_WEBHOOK"])
-            tb := g.Add("Button", "y+8 w180", Tx("Send test message"))
+            ctrls["DISCORD_WEBHOOK"] := UiEdit(g, "w460 r1", WIZ["DISCORD_WEBHOOK"])
+            tb := UiButton(g, "y+8 w190", Tx("Send test message"))
             tb.OnEvent("Click", (*) => TestDiscord(ctrls["DISCORD_WEBHOOK"].Value, g))
+            hb := UiButton(g, "x+10 yp w190", "❓ " Tx("How do I get this?"))
+            hb.OnEvent("Click", (*) => ShowGuide("webhook", g.Hwnd))
         case 5:
             g.Add("Text", "w460 y+6", Tx("Extras"))
             g.SetFont("s10 norm")
             for pair in [["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
                          ["READ_RESULTS", "Read my placement and XP after each match"], ["AUTO_START", "Start by itself when I click into Fortnite"],
                          ["START_WITH_WINDOWS", "Start with Windows"]] {
-                cb := g.Add("Checkbox", "w460 y+10", Tx(pair[2]))
-                cb.Value := WIZ[pair[1]] ? 1 : 0
-                ctrls[pair[1]] := cb
+                ctrls[pair[1]] := UiCheck(g, "xm y+10", Tx(pair[2]), WIZ[pair[1]])[1]
             }
         case 6:
             g.Add("Text", "w460 y+6", "✅ " Tx("All set!"))
@@ -2352,11 +2589,11 @@ WizardPage() {
     }
     g.SetFont("s10 norm")
     if (page > 1) {
-        bBack := g.Add("Button", "xm y+24 w100", Tx("Back"))
+        bBack := UiButton(g, "xm y+24 w110", Tx("Back"))
         bBack.OnEvent("Click", (*) => WizardNav(g, ctrls, -1))
-        bNext := g.Add("Button", "x+10 w100 Default", page = pages ? Tx("Finish") : Tx("Next"))
+        bNext := UiButton(g, "x+10 w110 Default", page = pages ? Tx("Finish") : Tx("Next"))
     } else {
-        bNext := g.Add("Button", "xm y+24 w100 Default", Tx("Next"))
+        bNext := UiButton(g, "xm y+24 w110 Default", Tx("Next"))
     }
     bNext.OnEvent("Click", (*) => WizardNav(g, ctrls, +1))
     g.OnEvent("Close", (*) => WizardClose(g))
