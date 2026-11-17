@@ -5,13 +5,18 @@
 **Set-and-forget AFK (Away From Keyboard) helper for Fortnite.** It readies up, clicks Play Again, walks around like a person and stops on a timer.
 
 ## ✨ Features
-- 🔁 **Auto queue:** clicks Ready / Play and Play Again by itself (any 16:9 screen, finds the buttons automatically)
+- 🔁 **Auto queue:** clicks Ready / Play and Play Again by itself (16:9, 16:10 and 21:9 screens)
 - 🚶 **Human-like movement:** walks, sprints, slides, crouches, strafes, jumps, dives, swaps weapons and looks around
+- 🧙 **Setup wizard** and **profiles** (Overnight, Quick 1 hour, Chill)
+- 🌍 **English / العربية**
 - ⏰ **Schedule:** start every day at a set time, stop after X hours or at a clock time
 - 💤 **When it stops:** just stop, close Fortnite, sleep or shut down the PC (30-second countdown, cancellable)
-- 🛟 **Self-recovery:** clicks error popups you teach it (F7), reopens Fortnite after a crash, gets itself unstuck
-- 📊 **Stats:** session history you can open in Excel, plus all-time matches and hours
-- 🔔 **Discord alerts** (optional) and **auto-updates** from this repo
+- 🌙 **Dim screen** and **mute Fortnite** while it runs
+- 🛟 **Self-recovery:** clicks popups you teach it (F7), reopens Fortnite after a crash, gets itself unstuck
+- 📊 **Stats:** reads your placement and XP, history in Excel, and a stats dashboard with charts
+- 🔔 **Discord:** alerts, screenshots, daily summary, friends leaderboard
+- 📱 **Phone control** with a Discord bot: `!start` `!stop` `!status` `!ss` `!log` `!lb` `!summary` `!dim`
+- ⬆️ **Auto-updates** from this repo, and **Start with Windows**
 
 ## 🚀 How to use
 1. Download **`lobby_loop.exe`** (or the `.ahk` if you have [AutoHotkey v2](https://www.autohotkey.com/)).
@@ -26,6 +31,8 @@
 | **F11** | Self-test |
 | **F12** | Settings |
 | **F7** | Teach a popup button (hover over it first) |
+| **F6** | Dim screen |
+| **F10** | Show / hide the status box |
 
 Keep Fortnite as the active window: it pauses when you tab out.
 
