@@ -1,3 +1,5 @@
+<p align="center"><img src="lobby_loop_icon.png" width="140" alt="Lobby Loop icon"></p>
+
 # 🔁 Lobby Loop
 
 **Set-and-forget AFK (Away From Keyboard) helper for Fortnite.** It readies up, clicks Play Again, walks around like a person and stops on a timer.

@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 6.1.0
+;@Ahk2Exe-SetVersion 6.2.0
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
 SetWorkingDir(A_ScriptDir)
@@ -13,12 +13,18 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "6.1"
+VERSION := "6.2"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
+; Picture used for the Discord bot
+ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v6.2  (17 Nov 2026)",
+    "  + Discord: linking a webhook sets its name and picture to Lobby Loop automatically",
+    "  + Every Discord alert shows the Lobby Loop name and icon",
+    "",
     "v6.1  (17 Nov 2026)",
     "  + New name: Lobby Loop (github.com/yensobased1/lobby-loop)",
     "  + Auto-update is switched on and points at the Lobby Loop GitHub",
@@ -523,6 +529,8 @@ SaveSettingsGui(g, eStop, dd, eStart, cbAuto, cbLaunch, eDiscord) {
         return
     }
 
+    if (hook != "" && hook != DiscordUrl())
+        SetupWebhook(hook)                ; new link: give it the Lobby Loop name + picture
     SaveStop(stopH, stopM, stopT)
     SetSetting("STOP_ACTION", ACTIONS[dd.Value][1])
     SetSetting("START_AT_TIME", startT)
@@ -972,7 +980,7 @@ Discord(msg, url := "") {
         url := DiscordUrl()
     if (url = "" || !IsDiscordUrl(url))
         return false
-    body := '{"content":"' JsonEscape("**" TITLE "** - " FormatTime(, "h:mm tt") ": " msg) '"}'
+    body := '{"username":"' JsonEscape(TITLE) '","avatar_url":"' ICON_URL '","content":"' JsonEscape("**" TITLE "** - " FormatTime(, "h:mm tt") ": " msg) '"}'
     try {
         req := ComObject("WinHttp.WinHttpRequest.5.1")
         req.SetTimeouts(3000, 3000, 3000, 4000)
@@ -995,10 +1003,55 @@ TestDiscord(url, g) {
         MsgBox("Paste the webhook link first.`nIt starts with https://discord.com/api/webhooks/", TITLE, "Icon! Owner" g.Hwnd)
         return
     }
+    SetupWebhook(url)
     if Discord("Test message: alerts are working!", url)
         MsgBox("Sent! Check your Discord channel.`nClick Save to keep the link.", TITLE, "Iconi Owner" g.Hwnd)
     else
         MsgBox("Couldn't send. Check the link and your internet.", TITLE, "Icon! Owner" g.Hwnd)
+}
+
+; Sets the webhook's own name and picture (works with just the webhook link)
+SetupWebhook(url) {
+    if !IsDiscordUrl(url)
+        return false
+    tmp := A_Temp "\lobby_loop_icon.png"
+    try {
+        Download(ICON_URL "?t=" A_TickCount, tmp)
+    } catch {
+        Log("Couldn't download the bot picture")
+        return false
+    }
+    b64 := FileToBase64(tmp)
+    if (b64 = "")
+        return false
+    body := '{"name":"' JsonEscape(TITLE) '","avatar":"data:image/png;base64,' b64 '"}'
+    try {
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        req.SetTimeouts(3000, 3000, 5000, 8000)
+        req.Open("PATCH", url, false)
+        req.SetRequestHeader("Content-Type", "application/json")
+        req.Send(body)
+        ok := (req.Status >= 200 && req.Status < 300)
+        Log("Webhook name/picture " (ok ? "set" : "failed, status " req.Status))
+        return ok
+    } catch as e {
+        Log("Webhook setup failed: " e.Message)
+        return false
+    }
+}
+
+FileToBase64(path) {
+    try data := FileRead(path, "RAW")
+    catch
+        return ""
+    flags := 0x40000001                   ; base64, no line breaks
+    chars := 0
+    DllCall("Crypt32\CryptBinaryToStringW", "Ptr", data, "UInt", data.Size, "UInt", flags, "Ptr", 0, "UInt*", &chars)
+    if !chars
+        return ""
+    out := Buffer(chars * 2, 0)
+    DllCall("Crypt32\CryptBinaryToStringW", "Ptr", data, "UInt", data.Size, "UInt", flags, "Ptr", out, "UInt*", &chars)
+    return StrGet(out, "UTF-16")
 }
 
 JsonEscape(str) {
