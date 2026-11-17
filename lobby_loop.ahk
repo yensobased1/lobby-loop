@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.0.1
+;@Ahk2Exe-SetVersion 7.0.2
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.0.1"
+VERSION := "7.0.2"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,11 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.0.2  (17 Nov 2026)",
+    "  * Settings window: fixed overlapping columns and cut-off text",
+    "  * Status box shows again (it was hidden on some PCs)",
+    "  * Self-test result closes after 6 seconds (press F11 again to close it sooner)",
+    "",
     "v7.0.1  (17 Nov 2026)",
     "  * Fixed the 'String has no method named Call' error on start",
     "",
@@ -351,8 +356,9 @@ if S["SHOW_OVERLAY"] {
     statusTxt := statusGui.Add("Text", "cLime w" sz[2] " h" sz[3] (IsArabic() ? " Right" : ""), "")
     statusGui.Show("x10 y10 NoActivate AutoSize")
     WinSetTransparent(215, statusGui)
-    DllCall("SetWindowDisplayAffinity", "Ptr", statusGui.Hwnd, "UInt", 0x11)   ; never in screenshots or streams
     PlaceOverlay()
+    statusGui.GetPos(&ox, &oy, &ow, &oh)
+    Log("Status box at " ox "," oy " (" ow "x" oh ")")
     SetTimer(RefreshOverlay, 400)
 }
 
@@ -500,6 +506,13 @@ AutoStartWatch() {
 }
 
 SelfTest() {
+    static lastShown := 0
+    if (A_TickCount - lastShown < 6000) {          ; pressed again while showing: close it
+        lastShown := 0
+        ToolTip()
+        return
+    }
+    lastShown := A_TickCount
     txt := "Fortnite window: " (WinExist(S["GAME_WINDOW"]) ? "found" : "NOT found")
     txt .= "`nActive now: " (WinActive(S["GAME_WINDOW"]) ? "Fortnite" : "something else")
     txt .= "`nScreen: " A_ScreenWidth "x" A_ScreenHeight "    Admin: " (A_IsAdmin ? "yes" : "NO") "    Version: " VERSION (A_IsCompiled ? " exe" : "")
@@ -520,7 +533,7 @@ SelfTest() {
             seen .= " #" i
     txt .= "`nLearned popup buttons: " POPUPS.Length (seen != "" ? "   visible now:" seen : "")
     Log("Self-test:`n" txt)
-    ShowTip(txt, 12000)
+    ShowTip(txt, 6000)
 }
 
 ShowWhatsNew() {
@@ -546,70 +559,79 @@ OpenSettings() {
     g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " Tx("Settings"))
     g.SetFont("s10", "Segoe UI")
     c := Map()
+    W := 400                                        ; column width
 
     ; ---- left column: playing ----
-    g.Add("Text", "Section", Tx("Profile"))
-    c["PROFILE"] := g.Add("DropDownList", "w300", [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")])
+    g.Add("Text", "xm ym Section w" W, Tx("Profile"))
+    c["PROFILE"] := g.Add("DropDownList", "w" W, [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")])
     c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
 
-    g.Add("Text", "y+12", Tx("Stop after a time, or at a clock time:"))
-    Hint(g, Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"))
-    c["STOP"] := g.Add("Edit", "w300", CurrentStopText())
+    g.Add("Text", "y+14 w" W, Tx("Stop after a time, or at a clock time:"))
+    Hint(g, Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"), W)
+    c["STOP"] := g.Add("Edit", "w" W, CurrentStopText())
 
-    g.Add("Text", "y+10", Tx("When it stops:"))
-    c["ACTION"] := g.Add("DropDownList", "w300", ActionLabels())
+    g.Add("Text", "y+14 w" W, Tx("When it stops:"))
+    c["ACTION"] := g.Add("DropDownList", "w" W, ActionLabels())
     c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
-    Hint(g, Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE))
+    Hint(g, Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE), W)
 
-    g.Add("Text", "y+10", Tx("Start every day at:"))
-    Hint(g, Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
-    c["START"] := g.Add("Edit", "w300", ClockText(S["START_AT_TIME"]))
+    g.Add("Text", "y+14 w" W, Tx("Start every day at:"))
+    Hint(g, Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"), W)
+    c["START"] := g.Add("Edit", "w" W, ClockText(S["START_AT_TIME"]))
 
+    first := true
     for pair in [["AUTO_START", "Start by itself when I click into Fortnite"], ["LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)"],
                  ["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
                  ["READ_RESULTS", "Read my placement and XP after each match"], ["START_WITH_WINDOWS", "Start with Windows"]] {
-        c[pair[1]] := g.Add("Checkbox", "w320 y+8", Tx(pair[2]))
+        c[pair[1]] := g.Add("Checkbox", "w" W (first ? " y+16" : " y+6"), Tx(pair[2]))
         c[pair[1]].Value := S[pair[1]] ? 1 : 0
+        first := false
     }
 
-    g.Add("Text", "y+12", Tx("Language"))
-    c["LANG"] := g.Add("DropDownList", "w140", ["English", "العربية"])
+    g.Add("Text", "y+16 w" W, Tx("Language"))
+    c["LANG"] := g.Add("DropDownList", "w200", ["English", "العربية"])
     c["LANG"].Choose(IsArabic() ? 2 : 1)
+    lastLeft := c["LANG"]
 
-    ; ---- right column: Discord ----
-    g.Add("Text", "ys x+40 Section w340", Tx("Your name (for Discord and the leaderboard):"))
-    c["PLAYER_NAME"] := g.Add("Edit", "w340", PlayerName())
+    ; ---- right column: Discord (fixed position, so it never overlaps the left column) ----
+    g.Add("Text", "xs+" (W + 40) " ys w" W, Tx("Your name (for Discord and the leaderboard):"))
+    c["PLAYER_NAME"] := g.Add("Edit", "w" W, PlayerName())
 
-    g.Add("Text", "y+12 w340", Tx("Discord alert link (optional):"))
-    Hint(g, Tx("Paste your Discord webhook link here. Blank = no alerts."))
-    c["HOOK"] := g.Add("Edit", "w340", DiscordUrl())
-    testBtn := g.Add("Button", "y+6 w180", Tx("Send test message"))
+    g.Add("Text", "y+14 w" W, Tx("Discord alert link (optional):"))
+    Hint(g, Tx("Paste your Discord webhook link here. Blank = no alerts."), W)
+    c["HOOK"] := g.Add("Edit", "w" W " r1", DiscordUrl())
+    testBtn := g.Add("Button", "y+8 w200", Tx("Send test message"))
     testBtn.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
 
-    c["SCREENSHOT_EVERY_MATCH"] := g.Add("Checkbox", "w340 y+10", Tx("Screenshot to Discord after every match"))
+    c["SCREENSHOT_EVERY_MATCH"] := g.Add("Checkbox", "y+14 w" W, Tx("Screenshot to Discord after every match"))
     c["SCREENSHOT_EVERY_MATCH"].Value := S["SCREENSHOT_EVERY_MATCH"] ? 1 : 0
-    g.Add("Text", "y+10 w340", Tx("Daily Discord summary at (blank = off):"))
-    c["SUMMARY"] := g.Add("Edit", "w140", ClockText(S["DAILY_SUMMARY_TIME"]))
+    g.Add("Text", "y+14 w" W, Tx("Daily Discord summary at (blank = off):"))
+    c["SUMMARY"] := g.Add("Edit", "w200", ClockText(S["DAILY_SUMMARY_TIME"]))
 
-    g.Add("Text", "y+16 w340", Tx("Phone control (Discord bot, optional):"))
-    Hint(g, Tx("Bot token"))
-    c["TOKEN"] := g.Add("Edit", "w340 Password", S["DISCORD_BOT_TOKEN"])
-    Hint(g, Tx("Channel ID"))
-    c["CHANNEL"] := g.Add("Edit", "w340", S["DISCORD_CHANNEL_ID"])
-    Hint(g, Tx("Your Discord user ID (only you can control it)"))
-    c["ALLOWED"] := g.Add("Edit", "w340", S["DISCORD_ALLOWED_IDS"])
+    g.Add("Text", "y+20 w" W, Tx("Phone control (Discord bot, optional):"))
+    Hint(g, Tx("Bot token"), W)
+    c["TOKEN"] := g.Add("Edit", "w" W " r1 Password", S["DISCORD_BOT_TOKEN"])
+    Hint(g, Tx("Channel ID"), W)
+    c["CHANNEL"] := g.Add("Edit", "w" W " r1", S["DISCORD_CHANNEL_ID"])
+    Hint(g, Tx("Your Discord user ID (only you can control it)"), W)
+    c["ALLOWED"] := g.Add("Edit", "w" W " r1", S["DISCORD_ALLOWED_IDS"])
+    lastRight := c["ALLOWED"]
 
-    saveBtn := g.Add("Button", "xm y+24 w110 Default", Tx("Save"))
+    ; ---- buttons under whichever column is taller ----
+    lastLeft.GetPos(, &y1, , &h1)
+    lastRight.GetPos(, &y2, , &h2)
+    by := Max(y1 + h1, y2 + h2) + 24
+    saveBtn := g.Add("Button", "xm y" by " w120 Default", Tx("Save"))
     saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
-    cancelBtn := g.Add("Button", "x+10 w110", Tx("Cancel"))
+    cancelBtn := g.Add("Button", "x+10 yp w120", Tx("Cancel"))
     cancelBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
     g.Show()
 }
 
-Hint(g, text) {
+Hint(g, text, width := 400) {
     g.SetFont("s9 cGray")
-    g.Add("Text", "w340", text)
+    g.Add("Text", "y+2 w" width, text)
     g.SetFont("s10 cDefault")
 }
 
