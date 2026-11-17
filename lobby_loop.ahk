@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.0.0
+;@Ahk2Exe-SetVersion 7.0.1
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.0"
+VERSION := "7.0.1"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,9 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.0.1  (17 Nov 2026)",
+    "  * Fixed the 'String has no method named Call' error on start",
+    "",
     "v7.0  (17 Nov 2026)",
     "  + Setup wizard on first run: language, profile, keys, Discord, extras",
     "  + Profiles: Overnight, Quick 1 hour, Chill (tray > Profile or F12)",
@@ -303,7 +306,7 @@ HK_SETTINGS := RegisterHotkey("HOTKEY_SETTINGS", "F12", (*) => OpenSettings())
 HK_TEACH := RegisterHotkey("HOTKEY_TEACH", "F7", (*) => TeachPopup())
 HK_BLACKOUT := RegisterHotkey("HOTKEY_BLACKOUT", "F6", (*) => ToggleBlackout())
 HK_OVERLAY := RegisterHotkey("HOTKEY_OVERLAY", "F10", (*) => ToggleOverlay())
-lastMsg := T("Press {1} to start", HK_TOGGLE)
+lastMsg := Tx("Press {1} to start", HK_TOGGLE)
 
 ; ---------- Tray menu ----------
 if (!A_IsCompiled && FileExist(A_ScriptDir "\lobby_loop.ico"))
@@ -312,29 +315,29 @@ A_IconTip := TITLE
 profileMenu := Menu()
 BuildProfileMenu()
 A_TrayMenu.Delete()
-trayStart := T("Start / Stop") "  (" HK_TOGGLE ")"
+trayStart := Tx("Start / Stop") "  (" HK_TOGGLE ")"
 A_TrayMenu.Add(trayStart, (*) => ToggleRun())
-A_TrayMenu.Add(T("Settings") "  (" HK_SETTINGS ")", (*) => OpenSettings())
-A_TrayMenu.Add(T("Profile"), profileMenu)
-A_TrayMenu.Add(T("Self-test") "  (" HK_TEST ")", (*) => SelfTest())
-A_TrayMenu.Add(T("Setup wizard"), (*) => StartWizard())
+A_TrayMenu.Add(Tx("Settings") "  (" HK_SETTINGS ")", (*) => OpenSettings())
+A_TrayMenu.Add(Tx("Profile"), profileMenu)
+A_TrayMenu.Add(Tx("Self-test") "  (" HK_TEST ")", (*) => SelfTest())
+A_TrayMenu.Add(Tx("Setup wizard"), (*) => StartWizard())
 A_TrayMenu.Add()
-A_TrayMenu.Add(T("Dim screen") "  (" HK_BLACKOUT ")", (*) => ToggleBlackout())
-A_TrayMenu.Add(T("Show / hide status box") "  (" HK_OVERLAY ")", (*) => ToggleOverlay())
+A_TrayMenu.Add(Tx("Dim screen") "  (" HK_BLACKOUT ")", (*) => ToggleBlackout())
+A_TrayMenu.Add(Tx("Show / hide status box") "  (" HK_OVERLAY ")", (*) => ToggleOverlay())
 A_TrayMenu.Add()
-A_TrayMenu.Add(T("Stats dashboard"), (*) => OpenDashboard())
-A_TrayMenu.Add(T("Open history (Excel)"), (*) => OpenHistory())
-A_TrayMenu.Add(T("Send screenshot to Discord"), (*) => SendScreenshot("Screenshot from " PlayerName()))
-A_TrayMenu.Add(T("Send log to Discord"), (*) => SendLog())
+A_TrayMenu.Add(Tx("Stats dashboard"), (*) => OpenDashboard())
+A_TrayMenu.Add(Tx("Open history (Excel)"), (*) => OpenHistory())
+A_TrayMenu.Add(Tx("Send screenshot to Discord"), (*) => SendScreenshot("Screenshot from " PlayerName()))
+A_TrayMenu.Add(Tx("Send log to Discord"), (*) => SendLog())
 A_TrayMenu.Add()
-A_TrayMenu.Add(T("Forget learned popup buttons"), (*) => ForgetPopups())
-A_TrayMenu.Add(T("Check for updates"), (*) => CheckUpdate(false))
-A_TrayMenu.Add(T("What's new") " (v" VERSION ")", (*) => ShowWhatsNew())
-A_TrayMenu.Add(T("Edit all settings (advanced)"), (*) => Run('notepad.exe "' INI_FILE '"'))
-A_TrayMenu.Add(T("Open log"), (*) => Run('notepad.exe "' LOG_FILE '"'))
-A_TrayMenu.Add(T("Reload"), (*) => Reload())
+A_TrayMenu.Add(Tx("Forget learned popup buttons"), (*) => ForgetPopups())
+A_TrayMenu.Add(Tx("Check for updates"), (*) => CheckUpdate(false))
+A_TrayMenu.Add(Tx("What's new") " (v" VERSION ")", (*) => ShowWhatsNew())
+A_TrayMenu.Add(Tx("Edit all settings (advanced)"), (*) => Run('notepad.exe "' INI_FILE '"'))
+A_TrayMenu.Add(Tx("Open log"), (*) => Run('notepad.exe "' LOG_FILE '"'))
+A_TrayMenu.Add(Tx("Reload"), (*) => Reload())
 A_TrayMenu.Add()
-A_TrayMenu.Add(T("Exit") "  (" HK_EXIT ")", (*) => ExitScript())
+A_TrayMenu.Add(Tx("Exit") "  (" HK_EXIT ")", (*) => ExitScript())
 A_TrayMenu.Default := trayStart
 
 ; ---------- Status box ----------
@@ -360,7 +363,7 @@ SetTimer(BotPoll, 6000)
 GdipStart()
 
 ; ---------- Startup ----------
-ShowTip(T("{1} loaded.", TITLE " v" VERSION) "`n" T("{1} = start/stop   {2} = settings   {3} = self-test", HK_TOGGLE, HK_SETTINGS, HK_TEST), 5000)
+ShowTip(Tx("{1} loaded.", TITLE " v" VERSION) "`n" Tx("{1} = start/stop   {2} = settings   {3} = self-test", HK_TOGGLE, HK_SETTINGS, HK_TEST), 5000)
 if migrated
     Log("Copied " migrated " file(s) from the old Fortnite AFK version")
 Log("Loaded v" VERSION (A_IsCompiled ? " (exe)" : " (ahk)") ". Screen " A_ScreenWidth "x" A_ScreenHeight ", admin=" A_IsAdmin ", stop: " DescribeStop() ", start: " DescribeStart() ", popups: " POPUPS.Length)
@@ -425,8 +428,8 @@ ToggleRun(reason := "you") {
         pendingAction := ""
         SetTimer(ActionTick, 0)
         ToolTip()
-        SetStatus(T("Cancelled"))
-        ShowTip(T("Cancelled"), 2000)
+        SetStatus(Tx("Cancelled"))
+        ShowTip(Tx("Cancelled"), 2000)
         return
     }
 
@@ -443,8 +446,8 @@ ToggleRun(reason := "you") {
         launchTick := 0
         launchTries := 0
         ApplyStopLimits()
-        SetStatus(T("Running"))
-        ShowTip(TITLE ": " T("ON") "`n" T("Stop: {1}", DescribeStop()), 2500)
+        SetStatus(Tx("Running"))
+        ShowTip(TITLE ": " Tx("ON") "`n" Tx("Stop: {1}", DescribeStop()), 2500)
         if S["BEEP"]
             SoundBeep(1000, 120)
         if S["MUTE_WHILE_RUNNING"]
@@ -462,9 +465,9 @@ ToggleRun(reason := "you") {
         totalMinutes += runMs / 60000
         IniWrite(Round(totalMinutes, 1), STATS_FILE, "Stats", "TotalMinutes")
         SaveHistory(runMs, reason)
-        SetStatus(T("Stopped"))
+        SetStatus(Tx("Stopped"))
         summary := FormatDuration(runMs) ", " matches " match" (matches = 1 ? "" : "es")
-        ShowTip(TITLE ": " T("OFF") "`n" T("This run: {1}", summary), 4000)
+        ShowTip(TITLE ": " Tx("OFF") "`n" Tx("This run: {1}", summary), 4000)
         if (reason != "you")
             Discord("Stopped (" reason "). This run: " summary "`n" LeaderboardLine())
         if S["BEEP"]
@@ -540,65 +543,65 @@ ShowWhatsNew() {
 ; Settings window
 ; ============================================================
 OpenSettings() {
-    g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " T("Settings"))
+    g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " Tx("Settings"))
     g.SetFont("s10", "Segoe UI")
     c := Map()
 
     ; ---- left column: playing ----
-    g.Add("Text", "Section", T("Profile"))
+    g.Add("Text", "Section", Tx("Profile"))
     c["PROFILE"] := g.Add("DropDownList", "w300", [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")])
     c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
 
-    g.Add("Text", "y+12", T("Stop after a time, or at a clock time:"))
-    Hint(g, T("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"))
+    g.Add("Text", "y+12", Tx("Stop after a time, or at a clock time:"))
+    Hint(g, Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"))
     c["STOP"] := g.Add("Edit", "w300", CurrentStopText())
 
-    g.Add("Text", "y+10", T("When it stops:"))
+    g.Add("Text", "y+10", Tx("When it stops:"))
     c["ACTION"] := g.Add("DropDownList", "w300", ActionLabels())
     c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
-    Hint(g, T("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE))
+    Hint(g, Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE))
 
-    g.Add("Text", "y+10", T("Start every day at:"))
-    Hint(g, T("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
+    g.Add("Text", "y+10", Tx("Start every day at:"))
+    Hint(g, Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
     c["START"] := g.Add("Edit", "w300", ClockText(S["START_AT_TIME"]))
 
     for pair in [["AUTO_START", "Start by itself when I click into Fortnite"], ["LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)"],
                  ["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
                  ["READ_RESULTS", "Read my placement and XP after each match"], ["START_WITH_WINDOWS", "Start with Windows"]] {
-        c[pair[1]] := g.Add("Checkbox", "w320 y+8", T(pair[2]))
+        c[pair[1]] := g.Add("Checkbox", "w320 y+8", Tx(pair[2]))
         c[pair[1]].Value := S[pair[1]] ? 1 : 0
     }
 
-    g.Add("Text", "y+12", T("Language"))
+    g.Add("Text", "y+12", Tx("Language"))
     c["LANG"] := g.Add("DropDownList", "w140", ["English", "العربية"])
     c["LANG"].Choose(IsArabic() ? 2 : 1)
 
     ; ---- right column: Discord ----
-    g.Add("Text", "ys x+40 Section w340", T("Your name (for Discord and the leaderboard):"))
+    g.Add("Text", "ys x+40 Section w340", Tx("Your name (for Discord and the leaderboard):"))
     c["PLAYER_NAME"] := g.Add("Edit", "w340", PlayerName())
 
-    g.Add("Text", "y+12 w340", T("Discord alert link (optional):"))
-    Hint(g, T("Paste your Discord webhook link here. Blank = no alerts."))
+    g.Add("Text", "y+12 w340", Tx("Discord alert link (optional):"))
+    Hint(g, Tx("Paste your Discord webhook link here. Blank = no alerts."))
     c["HOOK"] := g.Add("Edit", "w340", DiscordUrl())
-    testBtn := g.Add("Button", "y+6 w180", T("Send test message"))
+    testBtn := g.Add("Button", "y+6 w180", Tx("Send test message"))
     testBtn.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
 
-    c["SCREENSHOT_EVERY_MATCH"] := g.Add("Checkbox", "w340 y+10", T("Screenshot to Discord after every match"))
+    c["SCREENSHOT_EVERY_MATCH"] := g.Add("Checkbox", "w340 y+10", Tx("Screenshot to Discord after every match"))
     c["SCREENSHOT_EVERY_MATCH"].Value := S["SCREENSHOT_EVERY_MATCH"] ? 1 : 0
-    g.Add("Text", "y+10 w340", T("Daily Discord summary at (blank = off):"))
+    g.Add("Text", "y+10 w340", Tx("Daily Discord summary at (blank = off):"))
     c["SUMMARY"] := g.Add("Edit", "w140", ClockText(S["DAILY_SUMMARY_TIME"]))
 
-    g.Add("Text", "y+16 w340", T("Phone control (Discord bot, optional):"))
-    Hint(g, T("Bot token"))
+    g.Add("Text", "y+16 w340", Tx("Phone control (Discord bot, optional):"))
+    Hint(g, Tx("Bot token"))
     c["TOKEN"] := g.Add("Edit", "w340 Password", S["DISCORD_BOT_TOKEN"])
-    Hint(g, T("Channel ID"))
+    Hint(g, Tx("Channel ID"))
     c["CHANNEL"] := g.Add("Edit", "w340", S["DISCORD_CHANNEL_ID"])
-    Hint(g, T("Your Discord user ID (only you can control it)"))
+    Hint(g, Tx("Your Discord user ID (only you can control it)"))
     c["ALLOWED"] := g.Add("Edit", "w340", S["DISCORD_ALLOWED_IDS"])
 
-    saveBtn := g.Add("Button", "xm y+24 w110 Default", T("Save"))
+    saveBtn := g.Add("Button", "xm y+24 w110 Default", Tx("Save"))
     saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
-    cancelBtn := g.Add("Button", "x+10 w110", T("Cancel"))
+    cancelBtn := g.Add("Button", "x+10 w110", Tx("Cancel"))
     cancelBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
     g.Show()
@@ -683,7 +686,7 @@ SaveSettingsGui(g, c) {
         Reload()                                       ; redraw everything in the new language
         return
     }
-    ShowTip(T("Saved.") "`n" T("Stop: {1}", DescribeStop()) ", " T("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
+    ShowTip(Tx("Saved.") "`n" Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
 }
 
 SetSetting(key, value) {
@@ -694,7 +697,7 @@ SetSetting(key, value) {
 ActionLabels() {
     out := []
     for a in ACTIONS
-        out.Push(T(a[2]))
+        out.Push(Tx(a[2]))
     return out
 }
 
@@ -706,7 +709,7 @@ ActionIndex(actionKey) {
 }
 
 ActionLabel(actionKey) {
-    return T(ACTIONS[ActionIndex(actionKey)][2])
+    return Tx(ACTIONS[ActionIndex(actionKey)][2])
 }
 
 ; "21:30" -> "9:30 PM" for display in the settings window
@@ -860,14 +863,14 @@ DescribeStop() {
         parts.Push(c ? "at " FormatTime(NextOccurrence(c), "h:mm tt") : "at '" t "' (not understood)")
     }
     if (parts.Length = 0)
-        return T("no limit")
+        return Tx("no limit")
     if (parts.Length = 1)
         return parts[1]
     return parts[1] " or " parts[2] " (whichever is first)"
 }
 
 DescribeStart() {
-    return (startAtNext = "") ? T("manual") : T("Starts at {1}", FormatTime(startAtNext, "h:mm tt"))
+    return (startAtNext = "") ? Tx("manual") : Tx("Starts at {1}", FormatTime(startAtNext, "h:mm tt"))
 }
 
 ; ---------- What to do when the timer stops it ----------
@@ -897,9 +900,9 @@ ActionTick() {
         DoStopAction(act)
         return
     }
-    msg := T("{1} in {2} s", ActionLabel(pendingAction), pendingLeft)
-    SetStatus(msg " (" T("Press {1} to cancel", HK_TOGGLE) ")")
-    ToolTip(TITLE ": " msg "`n" T("Press {1} to cancel", HK_TOGGLE), A_ScreenWidth // 2 - 160, A_ScreenHeight // 2)
+    msg := Tx("{1} in {2} s", ActionLabel(pendingAction), pendingLeft)
+    SetStatus(msg " (" Tx("Press {1} to cancel", HK_TOGGLE) ")")
+    ToolTip(TITLE ": " msg "`n" Tx("Press {1} to cancel", HK_TOGGLE), A_ScreenWidth // 2 - 160, A_ScreenHeight // 2)
     if (S["BEEP"] && pendingLeft <= 5)
         SoundBeep(800, 80)
     pendingLeft -= 1
@@ -1350,8 +1353,8 @@ DoUpdate(url, latest) {
 ; ============================================================
 ; Language (English / Arabic)
 ; ============================================================
-; T("English text {1}", value) returns the Arabic version when LANG = ar
-T(text, args*) {
+; Tx("English text {1}", value) returns the Arabic version when LANG = ar
+Tx(text, args*) {
     if (S["LANG"] = "ar" && AR.Has(text))
         text := AR[text]
     return args.Length ? Format(text, args*) : text
@@ -1494,7 +1497,7 @@ LoadTranslations() {
 
 ProfileLabel(key) {
     labels := Map("overnight", "Overnight", "quick", "Quick 1 hour", "chill", "Chill", "custom", "Custom")
-    return T(labels.Has(key) ? labels[key] : "Custom")
+    return Tx(labels.Has(key) ? labels[key] : "Custom")
 }
 
 ApplyProfile(key) {
@@ -1522,7 +1525,7 @@ BuildProfileMenu() {
 
 ProfileMenuPick(key, *) {
     ApplyProfile(key)
-    ShowTip(T("Profile: {1}", ProfileLabel(key)) "`n" T("Stop: {1}", DescribeStop()), 3000)
+    ShowTip(Tx("Profile: {1}", ProfileLabel(key)) "`n" Tx("Stop: {1}", DescribeStop()), 3000)
 }
 
 ; ============================================================
@@ -1560,7 +1563,7 @@ ToggleBlackout(want := -1) {
         g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")
         g.BackColor := "000000"
         g.SetFont("s10", "Segoe UI")
-        g.Add("Text", "c404040 x20 y" (A_ScreenHeight - 40) " w" (A_ScreenWidth - 40), T("Screen dimmed by Lobby Loop. Press {1} to undo.", HK_BLACKOUT))
+        g.Add("Text", "c404040 x20 y" (A_ScreenHeight - 40) " w" (A_ScreenWidth - 40), Tx("Screen dimmed by Lobby Loop. Press {1} to undo.", HK_BLACKOUT))
         g.Show("x0 y0 w" A_ScreenWidth " h" A_ScreenHeight " NoActivate")
         WinSetTransparent(254, g)
         DllCall("SetWindowDisplayAffinity", "Ptr", g.Hwnd, "UInt", 0x11)   ; hidden from screen capture
@@ -1684,7 +1687,7 @@ TakeScreenshot() {
 
 SendScreenshot(msg := "Screenshot") {
     if !DiscordReady() {
-        ShowTip(T("Discord isn't set up. Press {1} and paste your webhook link.", HK_SETTINGS), 4000)
+        ShowTip(Tx("Discord isn't set up. Press {1} and paste your webhook link.", HK_SETTINGS), 4000)
         return false
     }
     path := TakeScreenshot()
@@ -1696,13 +1699,13 @@ SendScreenshot(msg := "Screenshot") {
 
 SendLog() {
     if !DiscordReady() {
-        ShowTip(T("Discord isn't set up. Press {1} and paste your webhook link.", HK_SETTINGS), 4000)
+        ShowTip(Tx("Discord isn't set up. Press {1} and paste your webhook link.", HK_SETTINGS), 4000)
         return false
     }
     copyPath := A_Temp "\" BASE "_log.txt"
     try FileCopy(LOG_FILE, copyPath, 1)
     ok := DiscordFile("Log file (v" VERSION (A_IsCompiled ? " exe" : "") ")", copyPath)
-    ShowTip(ok ? T("Sent to Discord") : T("Couldn't send to Discord"), 2500)
+    ShowTip(ok ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500)
     return ok
 }
 
@@ -2265,73 +2268,73 @@ WizardPage() {
     global WIZ
     page := WIZ["page"], pages := 6
     S["LANG"] := WIZ["LANG"]                         ; show the wizard in the chosen language
-    g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " T("Setup wizard"))
+    g := Gui(GuiOpts("+AlwaysOnTop"), TITLE " - " Tx("Setup wizard"))
     g.SetFont("s10", "Segoe UI")
     g.SetFont("s9 cGray")
-    g.Add("Text", "w460", T("Step {1} of {2}", page, pages))
+    g.Add("Text", "w460", Tx("Step {1} of {2}", page, pages))
     g.SetFont("s14 bold cDefault")
     ctrls := Map()
     switch page {
         case 1:
-            g.Add("Text", "w460 y+6", T("Welcome to Lobby Loop"))
+            g.Add("Text", "w460 y+6", Tx("Welcome to Lobby Loop"))
             g.SetFont("s10 norm")
-            g.Add("Text", "w460 y+10", T("Pick your language and your name."))
-            g.Add("Text", "y+12", T("Language"))
+            g.Add("Text", "w460 y+10", Tx("Pick your language and your name."))
+            g.Add("Text", "y+12", Tx("Language"))
             ctrls["LANG"] := g.Add("DropDownList", "w220", ["English", "العربية"])
             ctrls["LANG"].Choose(WIZ["LANG"] = "ar" ? 2 : 1)
-            g.Add("Text", "y+12 w460", T("Your name (for Discord and the leaderboard):"))
+            g.Add("Text", "y+12 w460", Tx("Your name (for Discord and the leaderboard):"))
             ctrls["PLAYER_NAME"] := g.Add("Edit", "w220", WIZ["PLAYER_NAME"] != "" ? WIZ["PLAYER_NAME"] : A_UserName)
         case 2:
-            g.Add("Text", "w460 y+6", T("How do you want to play?"))
+            g.Add("Text", "w460 y+6", Tx("How do you want to play?"))
             g.SetFont("s10 norm")
             descs := Map("overnight", "Overnight: runs 8 hours, dims the screen, mutes the game, then puts the PC to sleep",
                          "quick", "Quick 1 hour: runs for 1 hour, then stops",
                          "chill", "Chill: 3 hours with calmer, slower movement",
                          "custom", "Custom: keep my own settings")
             for i, key in PROFILE_KEYS {
-                rb := g.Add("Radio", "w460 y+10" (i = 1 ? " Group" : ""), T(descs[key]))
+                rb := g.Add("Radio", "w460 y+10" (i = 1 ? " Group" : ""), Tx(descs[key]))
                 rb.Value := (WIZ["PROFILE"] = key)
                 ctrls["P_" key] := rb
             }
         case 3:
-            g.Add("Text", "w460 y+6", T("Your Fortnite keys (change them if you don't use the defaults):"))
+            g.Add("Text", "w460 y+6", Tx("Your Fortnite keys (change them if you don't use the defaults):"))
             g.SetFont("s10 norm")
             for pair in [["KEY_FORWARD", "Forward"], ["KEY_LEFT", "Left"], ["KEY_BACK", "Back"], ["KEY_RIGHT", "Right"],
                          ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"]] {
-                g.Add("Text", "xm w120 y+8", T(pair[2]))
+                g.Add("Text", "xm w120 y+8", Tx(pair[2]))
                 ctrls[pair[1]] := g.Add("Edit", "x+10 yp-3 w120", WIZ[pair[1]])
             }
         case 4:
             g.Add("Text", "w460 y+6", "Discord")
             g.SetFont("s10 norm")
-            g.Add("Text", "w460 y+10", T("Discord alerts (optional). Leave blank to skip."))
+            g.Add("Text", "w460 y+10", Tx("Discord alerts (optional). Leave blank to skip."))
             ctrls["DISCORD_WEBHOOK"] := g.Add("Edit", "w460", WIZ["DISCORD_WEBHOOK"])
-            tb := g.Add("Button", "y+8 w180", T("Send test message"))
+            tb := g.Add("Button", "y+8 w180", Tx("Send test message"))
             tb.OnEvent("Click", (*) => TestDiscord(ctrls["DISCORD_WEBHOOK"].Value, g))
         case 5:
-            g.Add("Text", "w460 y+6", T("Extras"))
+            g.Add("Text", "w460 y+6", Tx("Extras"))
             g.SetFont("s10 norm")
             for pair in [["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
                          ["READ_RESULTS", "Read my placement and XP after each match"], ["AUTO_START", "Start by itself when I click into Fortnite"],
                          ["START_WITH_WINDOWS", "Start with Windows"]] {
-                cb := g.Add("Checkbox", "w460 y+10", T(pair[2]))
+                cb := g.Add("Checkbox", "w460 y+10", Tx(pair[2]))
                 cb.Value := WIZ[pair[1]] ? 1 : 0
                 ctrls[pair[1]] := cb
             }
         case 6:
-            g.Add("Text", "w460 y+6", "✅ " T("All set!"))
+            g.Add("Text", "w460 y+6", "✅ " Tx("All set!"))
             g.SetFont("s10 norm")
-            g.Add("Text", "w460 y+12", T("1. Open Fortnite in Windowed Fullscreen and go to the lobby."))
-            g.Add("Text", "w460 y+6", T("2. Press {1} to check that the buttons are found.", HK_TEST))
-            g.Add("Text", "w460 y+6", T("3. Press {1} to start. Press it again to stop.", HK_TOGGLE))
+            g.Add("Text", "w460 y+12", Tx("1. Open Fortnite in Windowed Fullscreen and go to the lobby."))
+            g.Add("Text", "w460 y+6", Tx("2. Press {1} to check that the buttons are found.", HK_TEST))
+            g.Add("Text", "w460 y+6", Tx("3. Press {1} to start. Press it again to stop.", HK_TOGGLE))
     }
     g.SetFont("s10 norm")
     if (page > 1) {
-        bBack := g.Add("Button", "xm y+24 w100", T("Back"))
+        bBack := g.Add("Button", "xm y+24 w100", Tx("Back"))
         bBack.OnEvent("Click", (*) => WizardNav(g, ctrls, -1))
-        bNext := g.Add("Button", "x+10 w100 Default", page = pages ? T("Finish") : T("Next"))
+        bNext := g.Add("Button", "x+10 w100 Default", page = pages ? Tx("Finish") : Tx("Next"))
     } else {
-        bNext := g.Add("Button", "xm y+24 w100 Default", T("Next"))
+        bNext := g.Add("Button", "xm y+24 w100 Default", Tx("Next"))
     }
     bNext.OnEvent("Click", (*) => WizardNav(g, ctrls, +1))
     g.OnEvent("Close", (*) => WizardClose(g))
@@ -2430,25 +2433,25 @@ RefreshOverlay() {
     if (statusTxt = "" || overlayHidden)
         return
     if running
-        head := T("ON") "   " FormatDuration(A_TickCount - sessionStart) "   " T("Matches") ": " matches "   " T("Clicks") ": " clicks
+        head := Tx("ON") "   " FormatDuration(A_TickCount - sessionStart) "   " Tx("Matches") ": " matches "   " Tx("Clicks") ": " clicks
     else
-        head := T("OFF") "   (" T("{1} = start,  {2} = settings", HK_TOGGLE, HK_SETTINGS) ")"
-    stopLine := T("Stop: {1}", DescribeStop())
+        head := Tx("OFF") "   (" Tx("{1} = start,  {2} = settings", HK_TOGGLE, HK_SETTINGS) ")"
+    stopLine := Tx("Stop: {1}", DescribeStop())
     if running {
         left := TimeLeftMs()
         if (left = "")
-            stopLine := T("Stop: no limit ({1} to set)", HK_SETTINGS)
+            stopLine := Tx("Stop: no limit ({1} to set)", HK_SETTINGS)
         else if (stopAt != "")
-            stopLine := T("Stops in {1}   (at {2})", FormatDuration(left), FormatTime(stopAt, "h:mm tt"))
+            stopLine := Tx("Stops in {1}   (at {2})", FormatDuration(left), FormatTime(stopAt, "h:mm tt"))
         else
-            stopLine := T("Stops in {1}", FormatDuration(left))
+            stopLine := Tx("Stops in {1}", FormatDuration(left))
     } else if (startAtNext != "") {
-        stopLine := T("Starts at {1}", FormatTime(startAtNext, "h:mm tt")) "   |   " stopLine
+        stopLine := Tx("Starts at {1}", FormatTime(startAtNext, "h:mm tt")) "   |   " stopLine
     }
     if (ActionIndex(S["STOP_ACTION"]) > 1)
-        stopLine .= ", " T("then {1}", StrLower(ActionLabel(S["STOP_ACTION"])))
+        stopLine .= ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"])))
     mins := totalMinutes + (running ? (A_TickCount - sessionStart) / 60000 : 0)
-    allTime := T("All time: {1} matches, {2}h {3}m", totalMatches, Floor(mins / 60), Mod(Floor(mins), 60))
+    allTime := Tx("All time: {1} matches, {2}h {3}m", totalMatches, Floor(mins / 60), Mod(Floor(mins), 60))
     statusTxt.Value := TITLE ": " head "`n" lastMsg "`n" stopLine "`n" allTime
 }
 
@@ -2645,14 +2648,14 @@ DoWalk(allowSprint := true) {
 }
 
 DoCrouchWalk() {
-    SetStatus(T("Crouch-walking"))
+    SetStatus(Tx("Crouch-walking"))
     TapKey(KEYMAP["crouch"])
     DoWalk(false)
     TapKey(KEYMAP["crouch"])
 }
 
 DoSlide() {
-    SetStatus(T("Sliding"))
+    SetStatus(Tx("Sliding"))
     Send("{" KEYMAP["fwd"] " down}{" KEYMAP["sprint"] " down}")
     SleepActive(Random(600, 1000))
     if CanAct() {
@@ -2663,7 +2666,7 @@ DoSlide() {
 }
 
 DoStrafe() {
-    SetStatus(T("Strafing"))
+    SetStatus(Tx("Strafing"))
     side := Random(0, 1)
     loop Random(3, 6) {
         if !CanAct()
@@ -2717,7 +2720,7 @@ MainLoop() {
             if running
                 SetStatus("Opening Fortnite... (try " launchTries ")")
         } else {
-            SetStatus(T("Waiting: Fortnite is not open"))
+            SetStatus(Tx("Waiting: Fortnite is not open"))
         }
         return
     }
@@ -2736,7 +2739,7 @@ MainLoop() {
         if (A_TickCount < activateUntil)
             try WinActivate(S["GAME_WINDOW"])    ; we just opened it: bring it to the front
         lastProgress := A_TickCount              ; watchdog only counts time spent in Fortnite
-        SetStatus(T("Paused: click into Fortnite"))
+        SetStatus(Tx("Paused: click into Fortnite"))
         return
     }
 
@@ -2749,7 +2752,7 @@ MainLoop() {
     ; 1) Menus: learned popups, Play Again after a match, lobby Ready / Play
     if TryPopups() {
         lastProgress := A_TickCount
-        SetStatus(T("Clicked a popup button"))
+        SetStatus(Tx("Clicked a popup button"))
         return
     }
     ; end screen: save the result areas (and a screenshot) before Play Again changes the screen
@@ -2766,7 +2769,7 @@ MainLoop() {
         lastProgress := A_TickCount
         unstickTries := 0
         IniWrite(totalMatches, STATS_FILE, "Stats", "TotalMatches")
-        SetStatus(T("Match {1} done, Play Again clicked", matches))
+        SetStatus(Tx("Match {1} done, Play Again clicked", matches))
         res := gotCrops ? ReadResults() : {place: "", xp: ""}
         RecordMatch(res)
         info := (res.place != "" ? ", placed #" res.place : "") (res.xp != "" ? ", " FormatNumber(res.xp) " XP" : "")
@@ -2780,12 +2783,12 @@ MainLoop() {
     if TryClick("lobby") {
         lastProgress := A_TickCount
         unstickTries := 0
-        SetStatus(T("Ready / Play clicked, waiting for match"))
+        SetStatus(Tx("Ready / Play clicked, waiting for match"))
         return
     }
 
     ; 2) Move around like a person
-    SetStatus(T("Walking"))
+    SetStatus(Tx("Walking"))
     if Chance(S["SLIDE_CHANCE"])
         DoSlide()
     else if Chance(S["CROUCH_CHANCE"])
@@ -2797,7 +2800,7 @@ MainLoop() {
     if (CanAct() && Chance(S["JUMP_CHANCE"]))
         DoJump()
     if (CanAct() && Chance(S["DIVE_CHANCE"])) {
-        SetStatus(T("Diving"))
+        SetStatus(Tx("Diving"))
         DoDive()
     }
     if (CanAct() && Chance(S["SWAP_CHANCE"]))
@@ -2805,7 +2808,7 @@ MainLoop() {
     if (CanAct() && Chance(S["LOOK_CHANCE"]))
         Look(Random(-300, 300), Random(-40, 40))
     if (CanAct() && Chance(S["IDLE_CHANCE"])) {
-        SetStatus(T("Standing still"))
+        SetStatus(Tx("Standing still"))
         SleepActive(Random(S["IDLE_MIN"], S["IDLE_MAX"]))
     }
 }
