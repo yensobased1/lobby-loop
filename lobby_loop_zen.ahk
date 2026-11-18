@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop Zen
 ;@Ahk2Exe-SetDescription Lobby Loop Zen
-;@Ahk2Exe-SetVersion 7.7.0
+;@Ahk2Exe-SetVersion 7.8.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop Zen"
-VERSION := "7.7"
+VERSION := "7.8"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,21 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.8  (18 Nov 2026)",
+    "  + Weekly prizes update by themselves (a GitHub job reads fnchesttracker.com)",
+    "  + One-click Overnight treasure farm (Settings > Play) and a Setup checklist",
+    "  + Weekly Discord recap (Sundays 8 PM) and a friends leaderboard card",
+    "  + Empty squad check (experimental): leaves when you got no teammates or they",
+    "    all left, and tracks teammates per match and the best hours for full squads",
+    "  + Team Fill check before every queue",
+    "  + Auto-resume after Fortnite outages (waits for 2 good checks)",
+    "  + Treasure Hours: start one now, or at a time. The stop timer waits for it",
+    "  + Phone push alerts with the free ntfy app",
+    "  + Prizes I already own, and a notice when only gizmos and Pirate Shop Access are left",
+    "  + Odds calculator (Epic's official odds)",
+    "  + Files go in a 'Lobby Loop data' folder, auto-clean and low disk warning",
+    "  + Search box in Settings, game language check, trust panel",
+    "",
     "v7.7  (18 Nov 2026)",
     "  + Treasure words update by themselves from GitHub (new weekly prize names)",
     "  + Stop after the match when you find Pirate Shop Access (or any treasure),",
@@ -219,6 +234,20 @@ DEFAULTS := [
     ["DAILY_SUMMARY_TIME", "23:55", "Daily Discord summary at this time (blank = off)"],
     ["DISCORD_BOT_TOKEN", "", "Discord bot token for phone control (blank = off). Never share it"],
     ["DISCORD_CHANNEL_ID", "", "Discord channel ID the bot listens to"],
+    ["WEEKLY_RECAP", 1, "1 = weekly recap in Discord on Sundays at 8 PM"],
+    ["LEADERBOARD_WEBHOOK", "", "Friends leaderboard: a webhook link for a shared channel (each PC keeps one card there)"],
+    ["NTFY_TOPIC", "", "Phone push with the ntfy app: your topic name (blank = off)"],
+    ["NTFY_SERVER", "", "ntfy server (blank = https://ntfy.sh)"],
+    ["EMPTY_SQUAD", 0, "1 = leave the match when you got no teammates or they all left (experimental)"],
+    ["SQUAD_MIN_ROWS", 1, "Squad list rows that mean 'only me' (1 if the list shows you too, 0 if not)"],
+    ["SQUAD_LEAVE_SEC", 30, "Seconds with no teammates before leaving"],
+    ["SQUAD_REGION", "0,0.06,0.20,0.42", "Where the squad list is: left,top,right,bottom as parts of the screen"],
+    ["TREASURE_HOUR_AT", "", "Start a Treasure Hour today at this time (blank = off, clears itself after)"],
+    ["TREASURE_HOUR_MIN", 120, "How long a Treasure Hour lasts, in minutes"],
+    ["CLEAN_DAYS", 60, "Delete match lists older than this many days (0 = keep, treasure finds are always kept)"],
+    ["CLEAN_PROOF_DAYS", 0, "Delete proof screenshots older than this many days (0 = keep forever)"],
+    ["LOG_MAX_MB", 5, "Keep the log under this many MB"],
+    ["DISK_MIN_GB", 5, "Warn when a drive has less than this many GB free (0 = off)"],
     ["DISCORD_ALLOWED_IDS", "", "Discord user IDs allowed to send commands, comma separated (blank = anyone)"],
     ["THEME", "dark", "Window theme: dark or light"],
     ["OVERLAY_CORNER", "top-left", "Status box corner: top-left, top-right, bottom-left, bottom-right or custom"],
@@ -333,14 +362,21 @@ ACTIONS := [
 ]
 
 SplitPath(A_ScriptName, , , , &BASE)
-INI_FILE := A_ScriptDir "\" BASE "_settings.ini"
-STATS_FILE := A_ScriptDir "\" BASE "_stats.ini"
-POPUP_FILE := A_ScriptDir "\" BASE "_popups.ini"
-HISTORY_FILE := A_ScriptDir "\" BASE "_history.csv"
-LOG_FILE := A_ScriptDir "\" BASE ".log"
-MATCHES_FILE := A_ScriptDir "\" BASE "_matches.csv"
-DASH_FILE := A_ScriptDir "\" BASE "_dashboard.html"
-TREASURE_FILE := A_ScriptDir "\" BASE "_treasure.csv"
+DATA_DIR := A_ScriptDir "\Lobby Loop data"          ; all settings, stats and logs live here (v7.8)
+try DirCreate(DATA_DIR)
+if !DirExist(DATA_DIR)
+    DATA_DIR := A_ScriptDir
+else
+    MoveDataFiles(DATA_DIR)
+INI_FILE := DATA_DIR "\" BASE "_settings.ini"
+STATS_FILE := DATA_DIR "\" BASE "_stats.ini"
+POPUP_FILE := DATA_DIR "\" BASE "_popups.ini"
+HISTORY_FILE := DATA_DIR "\" BASE "_history.csv"
+LOG_FILE := DATA_DIR "\" BASE ".log"
+MATCHES_FILE := DATA_DIR "\" BASE "_matches.csv"
+DASH_FILE := DATA_DIR "\" BASE "_dashboard.html"
+TREASURE_FILE := DATA_DIR "\" BASE "_treasure.csv"
+TEAMMATES_FILE := DATA_DIR "\" BASE "_teammates.csv"
 migrated := MigrateOldFiles()     ; first run after the rename to Lobby Loop
 
 ; Read settings; rebuild the file if it's new, missing keys, or from an older version
@@ -454,6 +490,12 @@ totalIdleKicks := Integer(IniRead(STATS_FILE, "Stats", "IdleKicks", 0))
 fpsWaiting := false    ; FPS saver waits for Lobby Loop to open Fortnite
 backToLobbyUntil := 0  ; just clicked Return to lobby: don't walk while the lobby loads
 prizeWaitUntil := 0    ; in the lobby: wait for prize screens until this time
+squadMatchTick := 0    ; when this match started (for the squad list check)
+squadBaseline := 0     ; most rows seen in the squad list this match
+squadLowSince := 0
+squadLeft := false
+treasureHourUntil := 0
+serverFetches := 0     ; how many times the Epic status page was really read
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
@@ -463,7 +505,8 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
                "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "TREASURE_ONLINE",
-               "TREASURE_STOP", "TREASURE_PROOF", "LOBBY_AFTER_MATCH", "LOBBY_PRIZE_WAIT", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
+               "TREASURE_STOP", "TREASURE_PROOF", "LOBBY_AFTER_MATCH", "LOBBY_PRIZE_WAIT", "WEEKLY_RECAP", "EMPTY_SQUAD",
+               "SQUAD_MIN_ROWS", "SQUAD_LEAVE_SEC", "SQUAD_REGION", "TREASURE_HOUR_MIN", "CLEAN_DAYS", "CLEAN_PROOF_DAYS", "LOG_MAX_MB", "DISK_MIN_GB", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
                "BATTERY_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
                "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
@@ -547,6 +590,8 @@ trayStart := Tx("Start / Stop") "  (" HK_TOGGLE ")"
 A_TrayMenu.Add(trayStart, (*) => ToggleRun())
 A_TrayMenu.Add(Tx("Pause 15 minutes"), (*) => (PauseFor(15), ShowTip(Tx("Paused for {1} minutes.", 15), 2500)))
 A_TrayMenu.Add(Tx("Settings") "  (" HK_SETTINGS ")", (*) => OpenSettings())
+A_TrayMenu.Add("🍀 " Tx("Treasure Hour now"), (*) => StartTreasureHour())
+A_TrayMenu.Add("📋 " Tx("Setup checklist"), (*) => ShowChecklist())
 A_TrayMenu.Add(Tx("Profile"), profileMenu)
 A_TrayMenu.Add(Tx("Stop timer"), timerMenu)
 A_TrayMenu.Add(Tx("Self-test") "  (" HK_TEST ")", (*) => SelfTest())
@@ -583,6 +628,9 @@ GdipStart()
 SetTimer(() => UpdateTreasureWords(), -8000)
 SetTimer(() => UpdateTreasureWords(), 21600000)          ; and every 6 hours
 SetTimer(CheckWindowModeOnce, -15000)
+SetTimer(CheckLanguageOnce, -20000)
+SetTimer(() => CleanData(), -60000)
+SetTimer(() => (IniRead(STATS_FILE, "Stats", "ChecklistShown", "") = "" && !running) ? ShowChecklist() : 0, -25000)
 if !running
     FpsRestoreLater()                                    ; put your FPS back if Lobby Loop closed while it was set
 
@@ -617,7 +665,7 @@ MigrateOldFiles() {
     copied := 0
     for suffix in ["_settings.ini", "_stats.ini", "_popups.ini", "_history.csv"] {
         oldFile := A_ScriptDir "\" oldBase suffix
-        newFile := A_ScriptDir "\" BASE suffix
+        newFile := DATA_DIR "\" BASE suffix
         if (FileExist(oldFile) && !FileExist(newFile)) {
             try {
                 FileCopy(oldFile, newFile)
@@ -731,6 +779,8 @@ ToggleRun(reason := "you") {
         ShowTip(TITLE ": " Tx("OFF") "`n" Tx("This run: {1}", summary), 4000)
         if (reason != "you") {
             Discord("Stopped (" reason "). This run: " summary "`n" LeaderboardLine())
+        NtfyPush("Stopped", "Stopped (" reason "). This run: " summary, 3)
+        LbCardUpdate(true)
             if (reason != "exit" && reason != "update" && reason != "pause")
                 Notify(Tx("Stopped"), reason ". " Tx("This run: {1}", summary))
         }
@@ -1100,6 +1150,13 @@ ScheduleWatch() {
     global startAtNext, goneSince
     WatchTick()
     BatteryCheck()
+    TreasureHourWatch()
+    WeeklyRecapCheck()
+    CleanData()
+    if running {
+        DiskCheck()
+        LbCardUpdate()
+    }
     ; daily Discord summary
     sumT := Trim(String(S["DAILY_SUMMARY_TIME"]))
     if (sumT != "" && DiscordReady() && (ck := ParseClock(sumT))) {
@@ -1716,6 +1773,111 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "A Jam Track: {1}%", "مقطع Jam Track: ‏{1}%",
+        "A car: {1}%", "سيارة: {1}%",
+        "A loading screen: {1}%", "شاشة تحميل: {1}%",
+        "A pickaxe or back bling: {1}%", "فأس أو حقيبة ظهر: {1}%",
+        "A rough guess of what your squad's chests could give you. Epic says every player has the same odds per chest. Lobby Loop doesn't change them.", "تقدير تقريبي لما قد تمنحك إياه صناديق فريقك. تقول Epic إن لكل لاعب نفس الفرص لكل صندوق. Lobby Loop لا يغيّرها.",
+        "About {1} chests.", "حوالي {1} صندوق.",
+        "After a match: Return to lobby (prize screens)", "بعد المباراة: العودة إلى الردهة (شاشات الجوائز)",
+        "Alerts on your phone (Discord or ntfy)", "تنبيهات على هاتفك (Discord أو ntfy)",
+        "All prizes owned", "تملك كل الجوائز",
+        "Best hour for full squads: around {1}.", "أفضل وقت لفرق كاملة: حوالي {1}.",
+        "Change", "تغيير",
+        "Chests your squad opens per match (guess)", "الصناديق التي يفتحها فريقك في كل مباراة (تقدير)",
+        "Clean now", "نظّف الآن",
+        "Cleaned {1} old items.", "تم تنظيف {1} عنصرًا قديمًا.",
+        "Click into Fortnite (in a match). Checking in {1} seconds...", "اضغط داخل Fortnite (في مباراة). الفحص بعد {1} ثوانٍ...",
+        "Clips may fail to save.", "قد يفشل حفظ المقاطع.",
+        "Close", "إغلاق",
+        "Close Fortnite first, then press Set it again. (Or in Fortnite: Settings > Display > Window Mode > Windowed Fullscreen.)", "أغلق Fortnite أولًا ثم اضغط اضبطه مرة أخرى. (أو في Fortnite: الإعدادات > العرض > وضع النافذة > ملء الشاشة بنافذة.)",
+        "Couldn't send", "تعذر الإرسال",
+        "Counts as only you: {1} or fewer", "يُعتبر أنت فقط: {1} أو أقل",
+        "Counts the names in the squad list (top left). Nobody left = nobody farming for you. Test it in a match first.", "يعد الأسماء في قائمة الفريق (أعلى اليسار). لا أحد = لا أحد يجمع لك. اختبره في مباراة أولًا.",
+        "Data folder:", "مجلد البيانات:",
+        "Delete match lists older than this many days (0 = keep, treasure finds are always kept):", "احذف قوائم المباريات الأقدم من هذا العدد من الأيام (0 = احتفظ، الكنوز تُحفظ دائمًا):",
+        "Delete proof screenshots older than this many days (0 = keep forever):", "احذف لقطات الإثبات الأقدم من هذا العدد من الأيام (0 = احتفظ للأبد):",
+        "Everyone pastes the same link. Each PC keeps one card there and updates it. !lb ranks everyone if your bot can see that channel.", "يلصق الجميع نفس الرابط. كل جهاز يحتفظ ببطاقة واحدة هناك ويحدّثها. ‏!lb يرتّب الجميع إذا كان البوت يرى تلك القناة.",
+        "Fortnite Sleep Mode: Never (Settings > Game > Energy Saving)", "وضع السكون في Fortnite: أبدًا (الإعدادات > اللعبة > توفير الطاقة)",
+        "Fortnite is set to '{1}'. Lobby Loop reads English words, so set Fortnite to English (Settings > Game > Language).", "لغة Fortnite هي '{1}'. يقرأ Lobby Loop كلمات إنجليزية، لذا اضبط Fortnite على الإنجليزية (الإعدادات > اللعبة > اللغة).",
+        "Fortnite language", "لغة Fortnite",
+        "Fortnite language: {1}", "لغة Fortnite: ‏{1}",
+        "Fortnite on Windowed Fullscreen", "Fortnite على ملء الشاشة بنافذة",
+        "Fortnite posts Treasure Hours in its calendar about 2 hours ahead. During one, the stop timer and match limit wait. Phone: !th", "تنشر Fortnite ساعات الكنوز في تقويمها قبل ساعتين تقريبًا. خلالها ينتظر مؤقت التوقف وحد المباريات. الهاتف: ‏!th",
+        "Free space on {1}: {2}", "المساحة الحرة على {1}: ‏{2}",
+        "Friends leaderboard: webhook link of a shared channel (optional)", "لوحة متصدري الأصدقاء: رابط webhook لقناة مشتركة (اختياري)",
+        "Gizmos: about {1}", "الأدوات: حوالي {1}",
+        "Gold outfit: {1}%", "الزي الذهبي: {1}%",
+        "Hours per night", "ساعات في الليلة",
+        "Install ntfy, subscribe to the same topic. Pick a long name nobody can guess: anyone with the name can read it.", "ثبّت ntfy واشترك في نفس الموضوع. اختر اسمًا طويلًا لا يمكن تخمينه: أي شخص يعرف الاسم يمكنه قراءته.",
+        "Keep the log under (MB):", "أبقِ السجل أقل من (ميغابايت):",
+        "Keys: {1} start / stop, {2} settings, {3} self-test", "المفاتيح: {1} تشغيل / إيقاف، {2} الإعدادات، {3} الفحص الذاتي",
+        "Last 30 days: {1} teammates per match on average, no teammates in {2} of {3} matches.", "آخر 30 يومًا: {1} زملاء في المباراة في المتوسط، بدون زملاء في {2} من {3} مباريات.",
+        "Leave when I got no teammates, or they all left (experimental)", "غادر عندما لا يكون لدي زملاء أو غادروا كلهم (تجريبي)",
+        "Lobby Loop is free and open source (github.com/yensobased1/lobby-loop). It has no login, no remote access and never asks for your Epic password. Your Discord links stay in your settings file on this PC. It does not change your odds: Epic gives every player the same odds per chest. Epic's rules ban cheats and exploits and can ban accounts, so use it at your own risk.", "‏Lobby Loop مجاني ومفتوح المصدر (github.com/yensobased1/lobby-loop). لا يحتاج تسجيل دخول ولا وصولًا عن بُعد ولا يطلب كلمة مرور Epic أبدًا. روابط Discord تبقى في ملف إعداداتك على هذا الجهاز. لا يغيّر فرصك: تمنح Epic كل لاعب نفس الفرص لكل صندوق. قواعد Epic تمنع الغش والثغرات وقد تحظر الحسابات، فاستخدمه على مسؤوليتك.",
+        "Low disk space", "مساحة القرص منخفضة",
+        "Matches per hour", "مباريات في الساعة",
+        "Minutes it lasts:", "مدتها بالدقائق:",
+        "Nights left", "الليالي المتبقية",
+        "No teammate counts yet (turn on the empty squad check, or play a few matches).", "لا توجد أعداد زملاء بعد (فعّل فحص الفريق الفارغ أو العب بضع مباريات).",
+        "Nobody left to farm, leaving the match", "لم يبقَ أحد ليجمع، مغادرة المباراة",
+        "Odds", "الفرص",
+        "Odds calculator", "حاسبة الفرص",
+        "Odds: 1 in 127 gizmo, 272 loading screen, 391 Jam Track, 568 pickaxe/back bling, 7,813 car, 137,500 Pirate Shop Access, 1,562,500 Gold outfit (Epic, 7 Nov 2026). Treasure Hours raise some of them.", "الفرص: 1 من 127 أداة، 272 شاشة تحميل، 391 Jam Track، ‏568 فأس/حقيبة ظهر، 7,813 سيارة، 137,500 وصول متجر القراصنة، 1,562,500 زي ذهبي (Epic، ‏7 نوفمبر 2026). ساعات الكنوز ترفع بعضها.",
+        "Only {1} GB free on {2}.", "متبقٍ {1} غيغابايت فقط على {2}.",
+        "Open the data folder", "فتح مجلد البيانات",
+        "Overnight treasure farm", "جمع الكنوز طوال الليل",
+        "Overnight treasure farm (one click)", "جمع الكنوز طوال الليل (بضغطة واحدة)",
+        "Overnight treasure farm is set.", "تم ضبط جمع الكنوز طوال الليل.",
+        "Phone push with the free ntfy app: topic name (optional)", "إشعارات الهاتف عبر تطبيق ntfy المجاني: اسم الموضوع (اختياري)",
+        "Pirate Shop Access: {1}%", "وصول متجر القراصنة: {1}%",
+        "Post my card", "انشر بطاقتي",
+        "Prizes I already own", "الجوائز التي أملكها",
+        "Restart as admin", "إعادة التشغيل كمسؤول",
+        "Rows in the squad list: {1}", "الصفوف في قائمة الفريق: {1}",
+        "Same as Settings > Mode > Fill. If the lobby is on No fill, it waits and tells you (or switches, if that's on).", "مثل الإعدادات > الوضع > التعبئة. إذا كانت الردهة على بدون تعبئة، ينتظر ويخبرك (أو يبدّل إذا كان ذلك مفعّلًا).",
+        "Search settings", "ابحث في الإعدادات",
+        "Send me a screenshot of the squad list if the count looks wrong.", "أرسل لقطة لقائمة الفريق إذا بدا العدد خاطئًا.",
+        "Sent", "تم الإرسال",
+        "Set it", "اضبطه",
+        "Set up", "إعداد",
+        "Setup checklist", "قائمة الإعداد",
+        "Squad list test", "اختبار قائمة الفريق",
+        "Storage", "التخزين",
+        "Team Fill check: Fill", "فحص التعبئة: تعبئة",
+        "Team Fill check: make sure Fill is on before every queue", "فحص التعبئة: تأكد من تفعيل التعبئة قبل كل طابور",
+        "Test push", "اختبار الإشعار",
+        "Test the squad count", "اختبار عدد الفريق",
+        "The prize list comes with the online treasure words. Press Update the words now first.", "قائمة الجوائز تأتي مع كلمات الكنوز من الإنترنت. اضغط حدّث الكلمات الآن أولًا.",
+        "Tick what's already in your Locker. A repeat prize gives you nothing, so Lobby Loop tells you when only gizmos and Pirate Shop Access are left.", "حدد ما هو موجود في خزانتك. الجائزة المكررة لا تعطيك شيئًا، لذا يخبرك Lobby Loop عندما يتبقى فقط الأدوات ووصول متجر القراصنة.",
+        "Treasure Hour now", "ساعة كنوز الآن",
+        "Treasure Hour today at (blank = off):", "ساعة الكنوز اليوم في (فارغ = إيقاف):",
+        "Treasure Hour until {1}", "ساعة الكنوز حتى {1}",
+        "Treasure Hours", "ساعات الكنوز",
+        "Trust", "الثقة",
+        "Turn on", "تفعيل",
+        "Turn on the overnight treasure farm settings?", "تفعيل إعدادات جمع الكنوز طوال الليل؟",
+        "Warn when a drive has less than (GB, 0 = off):", "حذّر عندما يكون في القرص أقل من (غيغابايت، 0 = إيقاف):",
+        "Week {1}", "الأسبوع {1}",
+        "Weekly recap on Sundays at 8 PM", "ملخص أسبوعي أيام الأحد الساعة 8 مساءً",
+        "What I own", "ما أملكه",
+        "Where Lobby Loop keeps its files, and cleaning up.", "أين يحفظ Lobby Loop ملفاته، والتنظيف.",
+        "You own all of week {1}'s prizes. Only gizmos and Pirate Shop Access can still drop for you this week.", "تملك كل جوائز الأسبوع {1}. فقط الأدوات ووصول متجر القراصنة يمكن أن تسقط لك هذا الأسبوع.",
+        "Your stop timer, stop action and keys stay the same.", "مؤقت التوقف وإجراء التوقف والمفاتيح تبقى كما هي.",
+        "same as Windows", "مثل Windows",
+        "After a match: Return to lobby", "بعد المباراة: العودة إلى الردهة",
+        "Don't leave while teammates play", "لا تغادر بينما يلعب الزملاء",
+        "Online treasure words", "كلمات الكنوز من الإنترنت",
+        "Lobby proof + Claim", "إثبات الردهة + الاستلام",
+        "Stop after finding Pirate Shop Access", "توقف بعد العثور على وصول متجر القراصنة",
+        "Wake from Sleep Mode", "الإيقاظ من وضع السكون",
+        "Known popups", "النوافذ المعروفة",
+        "Server check + auto-resume", "فحص الخوادم + الاستئناف التلقائي",
+        "Reopen Fortnite if it closes", "أعد فتح Fortnite إذا أُغلق",
+        "Keep the PC awake", "إبقاء الكمبيوتر مستيقظًا",
+        "FPS saver (30 FPS)", "موفر الإطارات (30 إطارًا)",
+        "Stand still while spectating", "الثبات أثناء المشاهدة",
+        "Weekly Discord recap", "ملخص Discord الأسبوعي",
         "3 times this run. Try the Chill profile or more movement.", "3 مرات في هذا التشغيل. جرّب ملف Chill أو حركة أكثر.",
         "Alerts & clips", "التنبيهات والمقاطع",
         "Also put the PC to sleep", "وضع الكمبيوتر في السكون أيضًا",
@@ -2257,6 +2419,7 @@ FinishMoveOverlay() {
 Notify(heading, msg) {
     if S["NOTIFY"]
         try TrayTip(msg, TITLE " · " heading, "Iconi Mute")
+    NtfyPush(heading, msg, InStr(heading, "🏴") || InStr(heading, "🎁") ? 5 : 3)
 }
 
 QuickTimer(h, m, *) {
@@ -2535,7 +2698,8 @@ PlayerName() {
 ; Machine-readable line other Lobby Loops read for the leaderboard
 LeaderboardLine() {
     hours := Round(totalMinutes / 60, 1)
-    return "``LB|" StrReplace(PlayerName(), "|", "/") "|" totalMatches "|" hours "|" bestPlace "|" totalXP "``"
+    wk := WeekStats()
+    return "``LB|" StrReplace(PlayerName(), "|", "/") "|" totalMatches "|" hours "|" bestPlace "|" totalXP "|" wk.matches "|" wk.treasures "|" PrizeProgress(PrizeWeek()).got "``"
 }
 
 ReadCsvRows(path) {
@@ -2598,7 +2762,7 @@ FormatNumber(n) {
 
 ; Reads the last 100 messages in the channel and ranks everyone's newest LB line
 BuildLeaderboard() {
-    resp := BotRequest("GET", "https://discord.com/api/v10/channels/" Trim(S["DISCORD_CHANNEL_ID"]) "/messages?limit=100")
+    resp := BotRequest("GET", "https://discord.com/api/v10/channels/" LeaderboardChannel() "/messages?limit=100")
     if (resp = "")
         return "Couldn't read the channel for the leaderboard."
     try msgs := JsonParse(resp)
@@ -2607,11 +2771,11 @@ BuildLeaderboard() {
     best := Map()
     for m in msgs {
         content := m.Has("content") ? m["content"] : ""
-        if !RegExMatch(content, "LB\|([^|``]+)\|(\d+)\|([\d.]+)\|(\d+)\|?(\d*)", &lb)
+        if !RegExMatch(content, "LB\|([^|``]+)\|(\d+)\|([\d.]+)\|(\d+)\|?(\d*)(?:\|(\d+)\|(\d+)\|(\d+))?", &lb)
             continue
         key := StrLower(lb[1])
         if !best.Has(key)        ; newest message comes first
-            best[key] := {name: lb[1], matches: Integer(lb[2]), hours: lb[3], place: Integer(lb[4]), xp: lb[5]}
+            best[key] := {name: lb[1], matches: Integer(lb[2]), hours: lb[3], place: Integer(lb[4]), xp: lb[5], wk: lb[6], tr: lb[7], pr: lb[8]}
     }
     if (best.Count = 0)
         return "No leaderboard data yet. It appears after daily summaries or stops."
@@ -2630,7 +2794,8 @@ BuildLeaderboard() {
     medals := ["🥇", "🥈", "🥉"]
     out := "🏆 **Lobby Loop leaderboard**`n"
     for i, v in list {
-        out .= (i <= 3 ? medals[i] : i ".") " **" v.name "**: " v.matches " matches, " v.hours " h" (v.place ? ", best #" v.place : "") "`n"
+        out .= (i <= 3 ? medals[i] : i ".") " **" v.name "**: " v.matches " matches, " v.hours " h" (v.place ? ", best #" v.place : "")
+            . (v.wk != "" ? "   ·   this week " v.wk " matches, " v.tr " treasure, prizes " v.pr : "") "`n"
         if (i >= 15)
             break
     }
@@ -2744,7 +2909,7 @@ HandleCommand(text, authorId := "") {
     cmd := StrLower(parts[1])
     target := parts.Length >= 2 ? Trim(parts[2]) : ""
     arg := ""
-    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode") {   ; these take a value, not a PC name
+    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode" || cmd = "th" || cmd = "treasurehour") {   ; these take a value, not a PC name
         arg := target
         target := ""
     }
@@ -2761,6 +2926,7 @@ HandleCommand(text, authorId := "") {
                 . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
                 . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
                 . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!servers`` ``!prizes```n"
+                . "🍀 ``!th`` / ``!th 90`` / ``!th 8:00 PM`` (Treasure Hour)   🗓️ ``!recap``   👥 ``!teammates```n"
                 . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
@@ -2904,6 +3070,17 @@ HandleCommand(text, authorId := "") {
         case "prizes":
             wk := PrizeWeek()
             Discord(who (wk ? "🎁 **Week " wk " prizes**`n" StrReplace(PrizesText(wk), "⬜", "▫️") : "no prize list yet (it comes with the online treasure words)."))
+        case "th", "treasurehour":
+            if (arg != "" && (ck := ParseClock(arg))) {
+                SetSetting("TREASURE_HOUR_AT", Format("{:02}:{:02}", ck.h, ck.m))
+                Discord(who "🍀 Treasure Hour set for **" ClockText(S["TREASURE_HOUR_AT"]) "** today (" S["TREASURE_HOUR_MIN"] " min).")
+            } else {
+                StartTreasureHour(IsNumber(arg) ? Max(10, Min(600, Number(arg))) : 0)
+            }
+        case "recap":
+            Discord(WeeklyRecapText())
+        case "teammates":
+            Discord(who "👥 " TeammateStatsText())
         case "servers":
             why := ServersDown()
             Discord(who (why != "" ? "🛑 Fortnite servers look down: **" why "**" : "✅ Fortnite servers look fine") " (status.epicgames.com)")
@@ -3327,7 +3504,7 @@ ScreenReaderTick() {
     }
     if (!running || !WinActive(S["GAME_WINDOW"]))
         return
-    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"] && !S["WAKE_FROM_SLEEP"] && !S["KNOWN_POPUPS"])
+    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"] && !S["WAKE_FROM_SLEEP"] && !S["KNOWN_POPUPS"] && !S["EMPTY_SQUAD"])
         return
     if (A_TickCount - lastOcrTick < (S["WATCH_TREASURE"] ? 3 : Max(5, S["SCREEN_READER_SECONDS"])) * 1000)
         return
@@ -3366,6 +3543,7 @@ HandleScreenText(txt) {
         gameState := "match"
         Log("Back from spectating")
     }
+    SquadCheck(lines)
     if S["WATCH_TREASURE"]
         CheckTreasure(lines)
     if (S["WATCH_TREASURE"] && LobbyProof(lines, joined))
@@ -3842,7 +4020,7 @@ Uninstall() {
     try FileDelete(A_Programs "\" TITLE ".lnk")
     try FileDelete(A_Desktop "\" TITLE ".lnk")
     if (MsgBox(Tx("Also delete your settings, stats and history?"), TITLE, "YesNo Icon?") = "Yes") {
-        for f in [INI_FILE, STATS_FILE, POPUP_FILE, HISTORY_FILE, MATCHES_FILE, TREASURE_FILE, DASH_FILE, LOG_FILE]
+        for f in [INI_FILE, STATS_FILE, POPUP_FILE, HISTORY_FILE, MATCHES_FILE, TREASURE_FILE, DASH_FILE, LOG_FILE, TEAMMATES_FILE]
             try FileDelete(f)
     }
     Log("Uninstalled")
@@ -4255,7 +4433,7 @@ MainLoop() {
 
     ; Stop timer (checked even when Fortnite isn't focused)
     left := TimeLeftMs()
-    if (left != "" && left <= 0) {
+    if (left != "" && left <= 0 && !TreasureHourActive()) {
         why := "time limit reached"
         if (stopAt != "" && DateDiff(stopAt, A_Now, "Seconds") <= 0)
             why := "reached " FormatTime(stopAt, "h:mm tt")
@@ -4333,7 +4511,7 @@ MainLoop() {
             return
         }
         limit := Integer(S["MATCH_LIMIT"])
-        if (limit > 0 && matches + 1 >= limit) {
+        if (limit > 0 && matches + 1 >= limit && !TreasureHourActive()) {
             OnMatchEnd(gotCrops, shot)
             ToggleRun("match limit reached (" limit ")")
             SetStatus(Tx("Stopped: {1} matches done", limit))
@@ -4408,8 +4586,10 @@ MainLoop() {
         SleepActive(1000)
         return
     }
-    if (gameState != "spectating")
+    if (gameState != "spectating" && gameState != "match") {
         gameState := "match"
+        OnMatchStart()
+    }
 
     ; 2) Move around like a person
     SetStatus(Tx("Walking"))
@@ -4446,6 +4626,7 @@ OnMatchEnd(gotCrops, shot) {
     unstickTries := 0
     IniWrite(totalMatches, STATS_FILE, "Stats", "TotalMatches")
     SetStatus(Tx("Match {1} done, Play Again clicked", matches))
+    RecordTeammates()
     res := gotCrops ? ReadResults() : {place: "", xp: ""}
     RecordMatch(res)
     info := (res.place != "" ? ", placed #" res.place : "") (res.xp != "" ? ", " FormatNumber(res.xp) " XP" : "")
@@ -4569,6 +4750,11 @@ TreasureFound(text, cat := "") {
         catName := prize.type
     msg := "🏴‍☠️ **" catName "**: " text " (#" treasureCount " all time)"
         . (IsObject(prize) ? "`n🎁 Week " prize.week " prize: **" prize.name "** (" prize.got "/" prize.total " this week)" : "")
+        . (TreasureHourActive() ? "   🍀 Treasure Hour" : "")
+    if !S["TREASURE_NOTIFY"]
+        NtfyPush("Treasure: " catName, text, 5, "pirate_flag")
+    if IsObject(prize)
+        SetTimer(() => OwnedNotice(), -5000)
     if (DiscordReady() && S["TREASURE_DISCORD"]) {
         shot := A_Temp "\ll_treasure.png"
         sent := false
@@ -4695,7 +4881,7 @@ ShowScreenText(waitMs := 0) {
     all := ""
     for ln in lines
         all .= ln.text "`r`n"
-    path := A_ScriptDir "\" BASE "_screen_text.txt"
+    path := DATA_DIR "\" BASE "_screen_text.txt"
     try FileDelete(path)
     try FileAppend(all, path, "UTF-8")
     rows := []
@@ -4889,16 +5075,19 @@ OpenSettings(startPage := 1) {
     COL2 := 320                                       ; second column offset
 
     ; sidebar
-    g.Add("Text", "x0 y0 w200 h660 Background" UiCol("side"))
+    g.Add("Text", "x0 y0 w200 h710 Background" UiCol("side"))
     UiText(g, "x20 y18 w170", "🔁 " TITLE, "head", UiCol("side"))
     UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
     sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"], ["🎬", "Alerts & clips"],
-                 ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"], ["🔗", "Share & tools"]]
+                 ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"], ["🧹", "Storage"], ["🔗", "Share & tools"]]
     for i, sec in sections {
         n := g.Add("Text", "x10 y" (72 + (i - 1) * 40) " w180 h35 0x200 Background" UiCol("side"), "   " sec[1] "   " StrReplace(Tx(sec[2]), "&", "&&"))
         n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
         navs.Push(n)
     }
+    sbox := UiEdit(g, "x12 y652 w176 r1", "")
+    SendMessage(0x1501, 1, StrPtr("🔍 " Tx("Search settings")), sbox)      ; placeholder text
+    sbox.OnEvent("Change", SettingsSearch.Bind(sbox, pages, navs))
 
     add(ctrl) => (pages[pages.Length].Push(ctrl), ctrl)
     addAll(arr) {
@@ -4954,6 +5143,10 @@ OpenSettings(startPage := 1) {
     edit("MATCH_LIMIT", "y+4 w120")
     say(Tx("Your name (for Discord and the leaderboard):"), "y+12")
     c["PLAYER_NAME"] := add(UiEdit(g, "x" CX " y+4 w300 r1", PlayerName()))
+    op := add(UiButton(g, "x" CX " y+18 w300", "🌙 " Tx("Overnight treasure farm (one click)")))
+    op.OnEvent("Click", (*) => ApplyOvernightPreset(g))
+    cl := add(UiButton(g, "x+10 yp w300", "📋 " Tx("Setup checklist")))
+    cl.OnEvent("Click", (*) => ShowChecklist(g.Hwnd))
 
     ; ---- 2. Mode ----
     newPage(Tx("Mode"), Tx("Before readying up, Lobby Loop reads the mode button in the lobby (for example 'Build, Squad, Fill')."))
@@ -4983,6 +5176,17 @@ OpenSettings(startPage := 1) {
     hint(Tx("Best: in Fortnite go to Settings > Game > Energy Saving and set Sleep Mode to Never."))
     tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+8")
     hint(Tx("Turn on Settings > Treasure to get told when you get gizmos, treasure cosmetics or pirate tokens."), "y+16")
+    tfa := UiCheck(g, "x" CX " y+14", Tx("Team Fill check: make sure Fill is on before every queue"), StrLower(S["MODE_FILL"]) = "fill", CW - 30)
+    tfc := addAll(tfa)
+    tfc.OnEvent("Click", (*) => c["MODE_FILL"].Choose(tfc.Value ? 2 : 1))
+    tfa[2].OnEvent("Click", (*) => c["MODE_FILL"].Choose(tfc.Value ? 2 : 1))
+    c["MODE_FILL"].OnEvent("Change", (*) => (tfc.Value := (c["MODE_FILL"].Value = 2)))
+    hint(Tx("Same as Settings > Mode > Fill. If the lobby is on No fill, it waits and tells you (or switches, if that's on)."))
+    tick("EMPTY_SQUAD", "Leave when I got no teammates, or they all left (experimental)", "y+12")
+    hint(Tx("Counts the names in the squad list (top left). Nobody left = nobody farming for you. Test it in a match first."))
+    sq := add(UiButton(g, "x" CX " y+8 w260", "👥 " Tx("Test the squad count")))
+    sq.OnEvent("Click", (*) => (g.Destroy(), ShowSquadTest(3000)))
+    add(UiText(g, "x" CX " y+10 w" CW " r2", TeammateStatsText(), "muted"))
 
     ; ---- 4. Schedule ----
     newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows."))
@@ -4993,6 +5197,14 @@ OpenSettings(startPage := 1) {
     tick("LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)")
     tick("CHECK_SERVERS", "Check Fortnite's servers first (wait during outages)")
     tick("START_WITH_WINDOWS", "Start with Windows")
+    add(UiText(g, "x" CX " y+18 w" CW, "🍀 " Tx("Treasure Hours"), "head"))
+    say(Tx("Treasure Hour today at (blank = off):"), "y+6 Section", 280)
+    c["TREASURE_HOUR_AT"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["TREASURE_HOUR_AT"])))
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("Minutes it lasts:")))
+    c["TREASURE_HOUR_MIN"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["TREASURE_HOUR_MIN"]))
+    th := add(UiButton(g, "x" CX " y+10 w260", "🍀 " Tx("Treasure Hour now")))
+    th.OnEvent("Click", (*) => (g.Destroy(), StartTreasureHour()))
+    hint(Tx("Fortnite posts Treasure Hours in its calendar about 2 hours ahead. During one, the stop timer and match limit wait. Phone: !th"), "y+6")
 
     ; ---- 5. Extras ----
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
@@ -5044,6 +5256,10 @@ OpenSettings(startPage := 1) {
     add(UiText(g, "xs+" COL2 " y+2 w300 r5", PrizesText(PrizeWeek()), "muted"))
     ws := add(UiButton(g, "xs+" COL2 " y+4 w300", "🌐 " Tx("Open Chest Tracker (fnchesttracker.com)")))
     ws.OnEvent("Click", (*) => Run("https://fnchesttracker.com/tracker"))
+    ob2 := add(UiButton(g, "xs+" COL2 " y+6 w145", "✅ " Tx("What I own")))
+    ob2.OnEvent("Click", (*) => ShowOwnedPicker(g.Hwnd))
+    oc := add(UiButton(g, "x+10 yp w145", "🎲 " Tx("Odds")))
+    oc.OnEvent("Click", (*) => ShowOddsCalc(g.Hwnd))
 
     ; ---- 7. Alerts & clips ----
     newPage(StrReplace(Tx("Alerts & clips"), "&", "&&"), Tx("What happens when treasure is found."))
@@ -5072,7 +5288,7 @@ OpenSettings(startPage := 1) {
     tc := add(UiButton(g, "x+10 yp w200", "🎬 " Tx("Test the clip key")))
     tc.OnEvent("Click", (*) => SettingsTestClip(g, c))
     pf := add(UiButton(g, "x" CX " y+8 w250", "📁 " Tx("Open proof screenshots")))
-    pf.OnEvent("Click", (*) => (DirCreate(A_ScriptDir "\" BASE "_treasure_proof"), Run(A_ScriptDir "\" BASE "_treasure_proof")))
+    pf.OnEvent("Click", (*) => (DirCreate(DATA_DIR "\" BASE "_treasure_proof"), Run(DATA_DIR "\" BASE "_treasure_proof")))
     add(UiText(g, "x" CX " y+18 w" CW, Tx("Recent finds"), "head"))
     add(UiText(g, "x" CX " y+2 w" CW " r3", RecentTreasureText(3), "muted"))
 
@@ -5123,6 +5339,17 @@ OpenSettings(startPage := 1) {
     c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["DAILY_SUMMARY_TIME"])))
     add(UiText(g, "xs+" COL2 " ys w300", Tx("Screenshot to Discord every (minutes, 0 = off):")))
     c["AUTO_SCREENSHOT_MIN"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["AUTO_SCREENSHOT_MIN"]))
+    tick("WEEKLY_RECAP", "Weekly recap on Sundays at 8 PM", "y+14")
+    say(Tx("Friends leaderboard: webhook link of a shared channel (optional)"), "y+12")
+    c["LEADERBOARD_WEBHOOK"] := add(UiEdit(g, "x" CX " y+4 w" (CW - 170) " r1", S["LEADERBOARD_WEBHOOK"]))
+    lbb := add(UiButton(g, "x+10 yp-2 w160", "🏆 " Tx("Post my card")))
+    lbb.OnEvent("Click", (*) => (SetSetting("LEADERBOARD_WEBHOOK", Trim(c["LEADERBOARD_WEBHOOK"].Value)), ShowTip(LbCardUpdate(true) ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500)))
+    hint(Tx("Everyone pastes the same link. Each PC keeps one card there and updates it. !lb ranks everyone if your bot can see that channel."))
+    say(Tx("Phone push with the free ntfy app: topic name (optional)"), "y+12")
+    c["NTFY_TOPIC"] := add(UiEdit(g, "x" CX " y+4 w" (CW - 170) " r1", S["NTFY_TOPIC"]))
+    ntb := add(UiButton(g, "x+10 yp-2 w160", "📲 " Tx("Test push")))
+    ntb.OnEvent("Click", (*) => (SetSetting("NTFY_TOPIC", Trim(c["NTFY_TOPIC"].Value)), ShowTip(NtfyPush("Test", "Test push from " PlayerName() "'s Lobby Loop", 3) ? Tx("Sent") : Tx("Couldn't send"), 2500)))
+    hint(Tx("Install ntfy, subscribe to the same topic. Pick a long name nobody can guess: anyone with the name can read it."))
 
     ; ---- 10. Phone control ----
     newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
@@ -5174,7 +5401,28 @@ OpenSettings(startPage := 1) {
     mv := add(UiButton(g, "xs+" COL2 " yp-4 w260", "✋ " Tx("Move status box")))
     mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
 
-    ; ---- 12. Share & tools ----
+    ; ---- 13. Storage ----
+    newPage(Tx("Storage"), Tx("Where Lobby Loop keeps its files, and cleaning up."))
+    say(Tx("Data folder:"), "y+16")
+    hint(DATA_DIR)
+    df := add(UiButton(g, "x" CX " y+6 w260", "📁 " Tx("Open the data folder")))
+    df.OnEvent("Click", (*) => Run(DATA_DIR))
+    say(Tx("Delete match lists older than this many days (0 = keep, treasure finds are always kept):"), "y+16")
+    edit("CLEAN_DAYS", "y+4 w120")
+    say(Tx("Delete proof screenshots older than this many days (0 = keep forever):"), "y+12")
+    edit("CLEAN_PROOF_DAYS", "y+4 w120")
+    say(Tx("Keep the log under (MB):"), "y+12 Section", 280)
+    edit("LOG_MAX_MB", "y+4 w120")
+    add(UiText(g, "xs+" COL2 " ys w300", Tx("Warn when a drive has less than (GB, 0 = off):")))
+    c["DISK_MIN_GB"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["DISK_MIN_GB"]))
+    cn := add(UiButton(g, "x" CX " y+16 w260", "🧹 " Tx("Clean now")))
+    cn.OnEvent("Click", (*) => CleanData(true))
+    try freeTxt := Round(DriveGetSpaceFree(SubStr(DATA_DIR, 1, 3)) / 1024, 1) " GB"
+    catch
+        freeTxt := "?"
+    hint(Tx("Free space on {1}: {2}", SubStr(DATA_DIR, 1, 2), freeTxt), "y+8")
+
+    ; ---- 14. Share & tools ----
     newPage(StrReplace(Tx("Share & tools"), "&", "&&"), Tx("Share your setup with friends, report bugs, install or remove."))
     say(Tx("Settings code (your profile, timers, movement and look. No names or Discord links):"), "y+18")
     c["CODE"] := add(UiEdit(g, "x" CX " y+4 w" CW " r2"))
@@ -5191,17 +5439,21 @@ OpenSettings(startPage := 1) {
     t3.OnEvent("Click", (*) => OpenDashboard())
     t4 := add(UiButton(g, "x+10 yp w300", "🗑️ " Tx("Uninstall")))
     t4.OnEvent("Click", (*) => (g.Destroy(), Uninstall()))
+    add(UiText(g, "x" CX " y+22 w" CW, "🛡️ " Tx("Trust"), "head"))
+    add(UiText(g, "x" CX " y+4 w" CW, TRUST_TEXT(), "muted"))
+    ck2 := add(UiButton(g, "x" CX " y+10 w300", "📋 " Tx("Setup checklist")))
+    ck2.OnEvent("Click", (*) => ShowChecklist(g.Hwnd))
 
     ; ---- bottom bar ----
-    g.Add("Text", "x" CX " y582 w" CW " h1 Background" UiCol("line"))
-    saveBtn := UiButton(g, "x" (CX + CW - 250) " y596 w120 Default", Tx("Save"))
+    g.Add("Text", "x" CX " y636 w" CW " h1 Background" UiCol("line"))
+    saveBtn := UiButton(g, "x" (CX + CW - 250) " y650 w120 Default", Tx("Save"))
     saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
     cancelBtn := UiButton(g, "x+10 yp w120", Tx("Cancel"))
     cancelBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
 
     SettingsNav(Min(Max(1, startPage), pages.Length), pages, navs)
-    g.Show("w" (CX + CW + 30) " h646")
+    g.Show("w" (CX + CW + 30) " h700")
 }
 
 SettingsTestClip(g, c) {
@@ -5263,12 +5515,29 @@ SaveSettingsGui(g, c) {
     hook := Trim(c["HOOK"].Value)
     if (hook != "" && !IsDiscordUrl(hook))
         return bad("That doesn't look like a Discord webhook link.`nIt should start with https://discord.com/api/webhooks/")
+    lbHook := Trim(c["LEADERBOARD_WEBHOOK"].Value)
+    if (lbHook != "" && !IsDiscordUrl(lbHook))
+        return bad("The leaderboard link should be a Discord webhook link (https://discord.com/api/webhooks/...).")
+    ntfyTopic := Trim(c["NTFY_TOPIC"].Value)
+    if (ntfyTopic != "" && !RegExMatch(ntfyTopic, "^[A-Za-z0-9_\-]{1,64}$"))
+        return bad("The ntfy topic can only use letters, numbers, - and _ (no spaces).")
+    thAt := ""
+    if (Trim(c["TREASURE_HOUR_AT"].Value) != "") {
+        if !(ck4 := ParseClock(Trim(c["TREASURE_HOUR_AT"].Value)))
+            return bad("Couldn't understand the Treasure Hour time.`n`nTry: 8:00 PM or 20:00")
+        thAt := Format("{:02}:{:02}", ck4.h, ck4.m)
+    }
     channel := Trim(c["CHANNEL"].Value)
     if (channel != "" && !RegExMatch(channel, "^\d{15,22}$"))
         return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
     try {
         nums := Map("MATCH_LIMIT", num("MATCH_LIMIT", Tx("Stop after this many matches (0 = no limit):"), 0, 10000),
                     "BATTERY_MIN", num("BATTERY_MIN", Tx("Battery % that counts as low:"), 5, 95),
+                    "CLEAN_DAYS", num("CLEAN_DAYS", Tx("Delete match lists older than this many days (0 = keep, treasure finds are always kept):"), 0, 3650),
+                    "CLEAN_PROOF_DAYS", num("CLEAN_PROOF_DAYS", Tx("Delete proof screenshots older than this many days (0 = keep forever):"), 0, 3650),
+                    "LOG_MAX_MB", num("LOG_MAX_MB", Tx("Keep the log under (MB):"), 1, 500),
+                    "DISK_MIN_GB", num("DISK_MIN_GB", Tx("Warn when a drive has less than (GB, 0 = off):"), 0, 1000),
+                    "TREASURE_HOUR_MIN", num("TREASURE_HOUR_MIN", Tx("Minutes it lasts:"), 10, 600),
                     "GAME_VOLUME", num("GAME_VOLUME", Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), 0, 100),
                     "CLIP_DELAY", num("CLIP_DELAY", Tx("Wait (seconds)"), 0, 60),
                     "AUTO_SCREENSHOT_MIN", num("AUTO_SCREENSHOT_MIN", Tx("Screenshot to Discord every (minutes, 0 = off):"), 0, 1440))
@@ -5313,7 +5582,7 @@ SaveSettingsGui(g, c) {
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
                 "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF",
-                "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
+                "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WEEKLY_RECAP", "EMPTY_SQUAD", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
                 "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
@@ -5339,6 +5608,9 @@ SaveSettingsGui(g, c) {
     SetSetting("START_WITH_WINDOWS", c["START_WITH_WINDOWS"].Value)
     SetSetting("PLAYER_NAME", Trim(c["PLAYER_NAME"].Value))
     SetSetting("DISCORD_WEBHOOK", hook)
+    SetSetting("LEADERBOARD_WEBHOOK", lbHook)
+    SetSetting("NTFY_TOPIC", ntfyTopic)
+    SetSetting("TREASURE_HOUR_AT", thAt)
     SetSetting("DISCORD_BOT_TOKEN", Trim(c["TOKEN"].Value))
     SetSetting("DISCORD_CHANNEL_ID", channel)
     SetSetting("DISCORD_ALLOWED_IDS", Trim(c["ALLOWED"].Value))
@@ -5400,6 +5672,7 @@ WakeFromSleep(lines) {
             continue
         lastWake := A_TickCount
         sleepWakes += 1
+        BumpWeek("SleepWakes")
         ReleaseAll()
         MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
         Sleep(200)
@@ -5558,7 +5831,7 @@ LobbyProof(lines, joined) {
     if !IsObject(btn)
         return false
     lastProof := A_TickCount
-    dir := A_ScriptDir "\" BASE "_treasure_proof"
+    dir := DATA_DIR "\" BASE "_treasure_proof"
     try DirCreate(dir)
     shot := dir "\" FormatTime(, "yyyy-MM-dd_HH-mm-ss") ".png"
     saved := SaveRegionImage(shot, 0, 0, A_ScreenWidth, A_ScreenHeight)
@@ -5614,6 +5887,7 @@ KnownPopup(lines, joined) {
     if idle {
         idleKicksRun += 1
         totalIdleKicks += 1
+        BumpWeek("IdleKicks")
         IniWrite(totalIdleKicks, STATS_FILE, "Stats", "IdleKicks")
         Log("Kicked for being idle (" idleKicksRun " this run)")
         if (idleKicksRun = 3) {
@@ -5640,13 +5914,43 @@ KnownPopup(lines, joined) {
 ; ============================================================
 ; v7.7: Fortnite server status (status.epicgames.com), checked before reopening Fortnite
 ; ============================================================
+; After an outage, Fortnite only counts as back after 2 good checks in a row (about 5 minutes)
 ServersDown() {
-    static cache := "", cacheTick := 0
+    static wasDown := false, streak := 0, seen := 0
     if !S["CHECK_SERVERS"]
         return ""
-    if (cacheTick && A_TickCount - cacheTick < 300000)
+    why := ServersDownRaw(wasDown)
+    if (why != "") {
+        if !wasDown {
+            wasDown := true
+            BumpWeek("Outages")
+        }
+        streak := 0, seen := serverFetches
+        return why
+    }
+    if !wasDown
+        return ""
+    if (serverFetches != seen) {
+        seen := serverFetches
+        streak += 1
+    }
+    if (streak >= 2) {
+        wasDown := false, streak := 0
+        Log("Fortnite servers are back")
+        Discord("✅ Fortnite servers are back. Resuming.")
+        NtfyPush("Servers back", "Fortnite servers are back. Lobby Loop is resuming.", 3)
+        return ""
+    }
+    return "checking the servers are really back"
+}
+
+ServersDownRaw(fast := false) {
+    global serverFetches
+    static cache := "", cacheTick := 0
+    if (cacheTick && A_TickCount - cacheTick < (fast ? 150000 : 300000))
         return cache
     cacheTick := A_TickCount
+    serverFetches += 1
     cache := ""
     res := HttpJson("GET", "https://status.epicgames.com/api/v2/summary.json")
     if (res.status != 200)
@@ -5824,7 +6128,7 @@ PrizesText(week) {
         return Tx("Comes with the online treasure words.")
     out := ""
     for p in PrizeList(week)
-        out .= (out = "" ? "" : "`n") (IniRead(STATS_FILE, "PrizesFound", PrizeKey(p.name), "") != "" ? "✅ " : "⬜ ") p.name "  (" p.type ")"
+        out .= (out = "" ? "" : "`n") (PrizeOwned(p.name) ? "✅ " : "⬜ ") p.name "  (" p.type ")"
     return out != "" ? out : Tx("Comes with the online treasure words.")
 }
 
@@ -5911,4 +6215,674 @@ LobbyNoteText(returnOn) {
 UpdateLobbyNotes(notes, returnOn) {
     for t in notes
         t.Value := LobbyNoteText(returnOn)
+}
+
+
+; ============================================================
+; v7.8: data folder (keeps the Desktop / script folder tidy)
+; ============================================================
+MoveDataFiles(dataDir) {
+    moved := 0
+    for suffix in ["_settings.ini", "_stats.ini", "_popups.ini", "_history.csv", ".log", "_matches.csv", "_dashboard.html",
+                   "_treasure.csv", "_screen_text.txt", "_teammates.csv"] {
+        src := A_ScriptDir "\" BASE suffix, dst := dataDir "\" BASE suffix
+        if (FileExist(src) && !FileExist(dst)) {
+            try {
+                FileMove(src, dst)
+                moved += 1
+            }
+        }
+    }
+    src := A_ScriptDir "\" BASE "_treasure_proof"
+    if (DirExist(src) && !DirExist(dataDir "\" BASE "_treasure_proof"))
+        try DirMove(src, dataDir "\" BASE "_treasure_proof")
+    return moved
+}
+
+; ============================================================
+; v7.8: weekly counters (idle kicks, Sleep Mode wakes, empty squads...) for the recap
+; ============================================================
+WeekKey(daysAgo := 0) => FormatTime(DateAdd(A_Now, -daysAgo, "Days"), "YWeek")
+
+BumpWeek(name, by := 1) {
+    k := "Week_" WeekKey()
+    IniWrite(Integer(IniRead(STATS_FILE, k, name, 0)) + by, STATS_FILE, k, name)
+}
+
+WeekCount(name) => Integer(IniRead(STATS_FILE, "Week_" WeekKey(), name, 0))
+
+; ============================================================
+; v7.8: one-click overnight treasure farm preset
+; ============================================================
+OvernightPreset() => [["LOBBY_AFTER_MATCH", 1, "After a match: Return to lobby"], ["WAIT_FOR_SQUAD", 1, "Don't leave while teammates play"],
+    ["WATCH_TREASURE", 1, "Watch for treasure"], ["TREASURE_ONLINE", 1, "Online treasure words"], ["TREASURE_PROOF", 1, "Lobby proof + Claim"],
+    ["TREASURE_STOP", "token", "Stop after finding Pirate Shop Access"], ["MODE_FILL", "fill", "Team Fill check: Fill"],
+    ["WAKE_FROM_SLEEP", 1, "Wake from Sleep Mode"], ["KNOWN_POPUPS", 1, "Known popups"], ["CHECK_SERVERS", 1, "Server check + auto-resume"],
+    ["LAUNCH_FORTNITE", 1, "Reopen Fortnite if it closes"], ["KEEP_AWAKE", 1, "Keep the PC awake"], ["FPS_SAVER", 1, "FPS saver (30 FPS)"],
+    ["SPECTATE_IDLE", 1, "Stand still while spectating"], ["WEEKLY_RECAP", 1, "Weekly Discord recap"]]
+
+ApplyOvernightPreset(g := 0) {
+    list := ""
+    for p in OvernightPreset()
+        list .= "•  " Tx(p[3]) "`n"
+    opts := "YesNo Iconi" (IsObject(g) ? " Owner" g.Hwnd : "")
+    if (MsgBox(Tx("Turn on the overnight treasure farm settings?") "`n`n" list "`n" Tx("Your stop timer, stop action and keys stay the same."), TITLE, opts) != "Yes")
+        return
+    for p in OvernightPreset()
+        SetSetting(p[1], p[2])
+    Log("Overnight treasure farm preset applied")
+    if IsObject(g) {
+        g.Destroy()
+        OpenSettings(1)
+    }
+    ShowTip("🌙 " Tx("Overnight treasure farm is set."), 3000)
+}
+
+; ============================================================
+; v7.8: weekly recap and the friends leaderboard
+; ============================================================
+WeeklyRecapText() {
+    st := WeekStats()
+    cats := Map("token", 0, "gizmo", 0, "cosmetic", 0, "custom", 0)
+    from := FormatTime(DateAdd(A_Now, -6, "Days"), "yyyy-MM-dd")
+    for r in ReadCsvRows(TREASURE_FILE)
+        if (r.Length >= 4 && StrCompare(r[1], from) >= 0 && cats.Has(r[3]))
+            cats[r[3]] += 1
+    tm := TeammateSummary(7)
+    wk := PrizeWeek()
+    pr := PrizeProgress(wk)
+    msg := "🗓️ **Weekly recap for " PlayerName() "**`n"
+        . "🎮 Matches: **" st.matches "**   ·   ⏱️ Time: **" Floor(st.minutes / 60) "h " Mod(Round(st.minutes), 60) "m**`n"
+        . "🏴‍☠️ Treasure: **" st.treasures "** (Pirate Shop Access " cats["token"] ", gizmos " cats["gizmo"] ", cosmetics " cats["cosmetic"] ")`n"
+    if wk
+        msg .= "🎁 Week " wk " prizes: **" pr.got "/" pr.total "** found or owned`n"
+    if tm.matches
+        msg .= "🤝 Teammates per match: **" tm.avg "** (no teammates in " tm.zero " of " tm.matches " matches)`n"
+    msg .= "😴 Sleep Mode wakes: " WeekCount("SleepWakes") "   ·   💤 Idle kicks: " WeekCount("IdleKicks")
+        . "   ·   🚪 Empty squads left: " WeekCount("EmptyLeaves") "   ·   🛑 Outage waits: " WeekCount("Outages")
+    return msg "`n" LeaderboardLine()
+}
+
+WeeklyRecapCheck() {
+    if (!S["WEEKLY_RECAP"] || !DiscordReady() || A_WDay != 1 || A_Hour < 20)   ; Sundays, 8 PM
+        return
+    if (IniRead(STATS_FILE, "Stats", "LastRecap", "") = FormatTime(, "yyyyMMdd"))
+        return
+    IniWrite(FormatTime(, "yyyyMMdd"), STATS_FILE, "Stats", "LastRecap")
+    Log("Weekly recap")
+    Discord(WeeklyRecapText())
+    LbCardUpdate(true)
+}
+
+; Each friend's PC keeps ONE card in the shared channel and edits it (a webhook can only edit its own messages)
+LbCardText() {
+    st := WeekStats()
+    pr := PrizeProgress(PrizeWeek())
+    return "🏆 **" PlayerName() "**   ·   this week: **" st.matches "** matches, **" Round(st.minutes / 60, 1) " h**, **"
+        . st.treasures "** treasure" (PrizeWeek() ? ", prizes **" pr.got "/" pr.total "**" : "")
+        . "   ·   all time: " totalMatches " matches, " Round(totalMinutes / 60, 1) " h"
+        . "`n-# updated " FormatTime(, "ddd h:mm tt") "   " LeaderboardLine()
+}
+
+LbCardUpdate(force := false) {
+    static lastTick := 0
+    hook := Trim(String(S["LEADERBOARD_WEBHOOK"]))
+    if (hook = "" || !IsDiscordUrl(hook))
+        return false
+    if (!force && A_TickCount - lastTick < 1800000)       ; every 30 minutes
+        return false
+    lastTick := A_TickCount
+    body := '{"username":"' JsonEscape(SubStr("Lobby Loop · " PlayerName(), 1, 80)) '","avatar_url":"' ICON_URL '","content":"' JsonEscape(SubStr(LbCardText(), 1, 1990)) '"}'
+    hookKey := SubStr(RegExReplace(hook, "[^0-9]"), 1, 20)
+    id := IniRead(STATS_FILE, "Leaderboard", "Msg_" hookKey, "")
+    if (id != "") {
+        res := HttpJson("PATCH", RegExReplace(hook, "\?.*$") "/messages/" id, body)
+        if (res.status >= 200 && res.status < 300)
+            return true
+        if (res.status != 404)
+            return false                                   ; rate limit or network: try again later
+    }
+    res := HttpJson("POST", RegExReplace(hook, "\?.*$") "?wait=true", body)
+    if (res.status >= 200 && res.status < 300 && RegExMatch(res.text, '"id"\s*:\s*"(\d+)"', &m)) {
+        IniWrite(m[1], STATS_FILE, "Leaderboard", "Msg_" hookKey)
+        Log("Leaderboard card posted")
+        return true
+    }
+    Log("Leaderboard card failed: " res.status)
+    return false
+}
+
+; Channel the leaderboard reads: the shared webhook's channel if there is one, else the phone-control channel
+LeaderboardChannel() {
+    static cache := Map()
+    hook := Trim(String(S["LEADERBOARD_WEBHOOK"]))
+    if (hook = "" || !IsDiscordUrl(hook))
+        return Trim(String(S["DISCORD_CHANNEL_ID"]))
+    if cache.Has(hook)
+        return cache[hook]
+    res := HttpJson("GET", RegExReplace(hook, "\?.*$"))
+    ch := RegExMatch(res.text, '"channel_id"\s*:\s*"(\d+)"', &m) ? m[1] : Trim(String(S["DISCORD_CHANNEL_ID"]))
+    cache[hook] := ch
+    return ch
+}
+
+; ============================================================
+; v7.8: squad list (top left): empty squad check and teammate stats  (EXPERIMENTAL)
+; Counts the name rows in the squad list. Rows that are "just me" = SQUAD_MIN_ROWS.
+; ============================================================
+SquadRegion() {
+    p := StrSplit(String(S["SQUAD_REGION"]), ",", " ")
+    if (p.Length != 4)
+        p := [0, 0.06, 0.20, 0.42]
+    return {x: Round(p[1] * A_ScreenWidth), y: Round(p[2] * A_ScreenHeight), x2: Round(p[3] * A_ScreenWidth), y2: Round(p[4] * A_ScreenHeight)}
+}
+
+SquadRows(lines) {
+    r := SquadRegion()
+    ys := []
+    for ln in lines {
+        cx := ln.x + ln.w // 2, cy := ln.y + ln.h // 2
+        if (cx < r.x || cx > r.x2 || cy < r.y || cy > r.y2)
+            continue
+        letters := RegExReplace(ln.text, "[^A-Za-z]")
+        if (StrLen(letters) < 3)                            ; skip health numbers and icons
+            continue
+        dupe := false
+        for y in ys
+            if (Abs(y - cy) < Max(14, ln.h))
+                dupe := true
+        if !dupe
+            ys.Push(cy)
+    }
+    return ys.Length
+}
+
+OnMatchStart() {
+    global squadMatchTick, squadBaseline, squadLowSince, squadLeft
+    squadMatchTick := A_TickCount, squadBaseline := 0, squadLowSince := 0, squadLeft := false
+}
+
+SquadCheck(lines) {
+    global squadBaseline, squadLowSince, squadLeft, backToLobbyUntil
+    if (!running || gameState != "match" || !squadMatchTick || squadLeft)
+        return
+    age := A_TickCount - squadMatchTick
+    if (age < 90000)                                        ; still loading in
+        return
+    rows := SquadRows(lines)
+    squadBaseline := Max(squadBaseline, rows)
+    if !S["EMPTY_SQUAD"]
+        return
+    minRows := Integer(S["SQUAD_MIN_ROWS"])
+    why := ""
+    if (age > 150000 && squadBaseline <= minRows)
+        why := "no teammates"
+    else if (squadBaseline > minRows && rows <= minRows) {
+        if !squadLowSince
+            squadLowSince := A_TickCount
+        else if (A_TickCount - squadLowSince >= Number(S["SQUAD_LEAVE_SEC"]) * 1000)
+            why := "all teammates left"
+    } else {
+        squadLowSince := 0
+    }
+    if (why = "")
+        return
+    squadLeft := true
+    Log("Empty squad (" why "): leaving the match")
+    BumpWeek("EmptyLeaves")
+    SetStatus("🚪 " Tx("Nobody left to farm, leaving the match"))
+    Discord("🚪 " (why = "no teammates" ? "Got **no teammates**" : "**All teammates left**") ", leaving the match to find a new squad.")
+    if ReturnToLobbyClick() {
+        backToLobbyUntil := A_TickCount + 45000
+        RecordTeammates(true)
+    }
+}
+
+RecordTeammates(leftEarly := false) {
+    static lastMatchTick := 0
+    if (!squadMatchTick || squadMatchTick = lastMatchTick || squadBaseline = 0)
+        return
+    lastMatchTick := squadMatchTick
+    mates := Max(0, squadBaseline - Integer(S["SQUAD_MIN_ROWS"]))
+    if !FileExist(TEAMMATES_FILE)
+        try FileAppend("Date,Time,Hour,Teammates,LeftEarly`r`n", TEAMMATES_FILE, "UTF-8")
+    try FileAppend(FormatTime(, "yyyy-MM-dd") "," FormatTime(, "HH:mm") "," A_Hour "," mates "," (leftEarly ? 1 : 0) "`r`n", TEAMMATES_FILE, "UTF-8")
+}
+
+TeammateSummary(days := 30) {
+    from := FormatTime(DateAdd(A_Now, -(days - 1), "Days"), "yyyy-MM-dd")
+    out := {matches: 0, sum: 0, zero: 0, avg: 0, best: ""}
+    byHour := Map()
+    for r in ReadCsvRows(TEAMMATES_FILE) {
+        if (r.Length < 4 || StrCompare(r[1], from) < 0 || !IsNumber(r[4]))
+            continue
+        out.matches += 1, out.sum += r[4]
+        if (r[4] = 0)
+            out.zero += 1
+        h := Integer(r[3])
+        if !byHour.Has(h)
+            byHour[h] := [0, 0]
+        byHour[h][1] += r[4], byHour[h][2] += 1
+    }
+    if out.matches
+        out.avg := Round(out.sum / out.matches, 1)
+    bestAvg := -1
+    for h, v in byHour
+        if (v[2] >= 3 && v[1] / v[2] > bestAvg)
+            bestAvg := v[1] / v[2], out.best := Format("{:02}:00", h)
+    return out
+}
+
+TeammateStatsText() {
+    t := TeammateSummary(30)
+    if !t.matches
+        return Tx("No teammate counts yet (turn on the empty squad check, or play a few matches).")
+    return Tx("Last 30 days: {1} teammates per match on average, no teammates in {2} of {3} matches.", t.avg, t.zero, t.matches)
+        . (t.best != "" ? "`n" Tx("Best hour for full squads: around {1}.", t.best) : "")
+}
+
+ShowSquadTest(waitMs := 3000) {
+    ShowTip(Tx("Click into Fortnite (in a match). Checking in {1} seconds...", waitMs // 1000), waitMs - 300)
+    Sleep(waitMs)
+    r := SquadRegion()
+    lines := OcrRegionSync(r.x, r.y, r.x2 - r.x, r.y2 - r.y)
+    rows := SquadRows(lines)
+    list := [["👥", Tx("Rows in the squad list: {1}", rows)], ["•", Tx("Counts as only you: {1} or fewer", S["SQUAD_MIN_ROWS"]), true]]
+    for ln in lines
+        if (list.Length < 10)
+            list.Push(["•", ln.text, true])
+    ShowCard("👥 " Tx("Squad list test"), list, 12000, Tx("Send me a screenshot of the squad list if the count looks wrong."))
+}
+
+; ============================================================
+; v7.8: Treasure Hours (better odds for a couple of hours, times posted in-game about 2 hours ahead)
+; ============================================================
+StartTreasureHour(mins := 0) {
+    global treasureHourUntil, goneSince
+    mins := mins ? mins : Number(S["TREASURE_HOUR_MIN"])
+    treasureHourUntil := A_TickCount + mins * 60000
+    Log("Treasure Hour for " mins " min")
+    SetStatus("🍀 " Tx("Treasure Hour until {1}", FormatTime(DateAdd(A_Now, mins, "Minutes"), "h:mm tt")))
+    Discord("🍀 **Treasure Hour** mode for " mins " minutes (until " FormatTime(DateAdd(A_Now, mins, "Minutes"), "h:mm tt") "). The stop timer and match limit wait until it's over.")
+    if !running {
+        if WinExist(S["GAME_WINDOW"])
+            try WinActivate(S["GAME_WINDOW"])
+        ToggleRun("Treasure Hour")
+        if (!WinExist(S["GAME_WINDOW"]) && S["LAUNCH_FORTNITE"])
+            goneSince := A_TickCount - 31000
+    }
+}
+
+TreasureHourActive() => treasureHourUntil && A_TickCount < treasureHourUntil
+
+TreasureHourWatch() {
+    global treasureHourUntil
+    if (treasureHourUntil && A_TickCount >= treasureHourUntil) {
+        treasureHourUntil := 0
+        Log("Treasure Hour over")
+        Discord("🍀 Treasure Hour is over.")
+    }
+    t := Trim(String(S["TREASURE_HOUR_AT"]))
+    if (t = "" || !(ck := ParseClock(t)))
+        return
+    today := FormatTime(, "yyyyMMdd")
+    due := today Format("{:02}{:02}00", ck.h, ck.m)
+    if (DateDiff(A_Now, due, "Seconds") >= 0 && DateDiff(A_Now, due, "Minutes") < 30
+        && IniRead(STATS_FILE, "Stats", "LastTreasureHour", "") != today) {
+        IniWrite(today, STATS_FILE, "Stats", "LastTreasureHour")
+        SetSetting("TREASURE_HOUR_AT", "")                  ; one-shot: Treasure Hours change every time
+        StartTreasureHour()
+    }
+}
+
+; ============================================================
+; v7.8: phone push alerts through ntfy (free app, no account: pick a topic name nobody can guess)
+; ============================================================
+NtfyPush(heading, msg, priority := 3, tags := "") {
+    topic := Trim(String(S["NTFY_TOPIC"]))
+    if (topic = "")
+        return false
+    server := RTrim(Trim(String(S["NTFY_SERVER"])) != "" ? Trim(String(S["NTFY_SERVER"])) : "https://ntfy.sh", "/")
+    try {
+        n := StrPut(msg, "UTF-8") - 1
+        buf := Buffer(n + 1)
+        StrPut(msg, buf, "UTF-8")
+        arr := ComObjArray(0x11, Max(n, 1))
+        loop n
+            arr[A_Index - 1] := NumGet(buf, A_Index - 1, "UChar")
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        req.SetTimeouts(3000, 3000, 4000, 5000)
+        req.Open("POST", server "/" topic, false)
+        req.SetRequestHeader("Title", RegExReplace(TITLE " - " heading, "[^\x20-\x7E]"))   ; headers: plain text only
+        req.SetRequestHeader("Priority", String(priority))
+        if (tags != "")
+            req.SetRequestHeader("Tags", tags)
+        req.SetRequestHeader("Content-Type", "text/plain; charset=utf-8")
+        req.Send(arr)
+        return req.Status >= 200 && req.Status < 300
+    } catch as e {
+        Log("ntfy failed: " e.Message)
+    }
+    return false
+}
+
+; ============================================================
+; v7.8: prizes you already own (a repeat prize gives nothing, only gizmos repeat)
+; ============================================================
+PrizeOwned(name) => IniRead(STATS_FILE, "PrizesFound", PrizeKey(name), "") != "" || IniRead(STATS_FILE, "PrizesOwned", PrizeKey(name), "") != ""
+
+PrizeProgress(week) {
+    got := 0, total := 0
+    if week
+        for p in PrizeList(week) {
+            total += 1
+            if PrizeOwned(p.name)
+                got += 1
+        }
+    return {got: got, total: total}
+}
+
+ShowOwnedPicker(owner := 0) {
+    wk := PrizeWeek()
+    if !wk {
+        ShowTip(Tx("The prize list comes with the online treasure words. Press Update the words now first."), 3500)
+        return
+    }
+    g := ThemeGui(TITLE " - " Tx("Prizes I already own"))
+    UiText(g, "x20 y16 w480", Tx("Tick what's already in your Locker. A repeat prize gives you nothing, so Lobby Loop tells you when only gizmos and Pirate Shop Access are left."), "muted")
+    boxes := []
+    loop wk {
+        w := wk - A_Index + 1
+        UiText(g, "x20 y+12 w480", Tx("Week {1}", w), "head")
+        for p in PrizeList(w) {
+            b := UiCheck(g, "x20 y+6", p.name "  (" p.type ")", PrizeOwned(p.name), 440)
+            boxes.Push([p.name, b[1]])
+        }
+    }
+    sb := UiButton(g, "x20 y+16 w140 Default", Tx("Save"))
+    sb.OnEvent("Click", (*) => SaveOwned(g, boxes))
+    cb := UiButton(g, "x+10 yp w140", Tx("Cancel"))
+    cb.OnEvent("Click", (*) => g.Destroy())
+    g.OnEvent("Escape", (*) => g.Destroy())
+    if owner
+        g.Opt("+Owner" owner)
+    g.Show("w520")
+}
+
+SaveOwned(g, boxes) {
+    for b in boxes {
+        if b[2].Value
+            IniWrite(1, STATS_FILE, "PrizesOwned", PrizeKey(b[1]))
+        else
+            try IniDelete(STATS_FILE, "PrizesOwned", PrizeKey(b[1]))
+    }
+    g.Destroy()
+    ShowTip(Tx("Saved."), 2000)
+    OwnedNotice(true)
+}
+
+; Once a week: tell the user when they own every cosmetic prize of this week
+OwnedNotice(now := false) {
+    wk := PrizeWeek()
+    if !wk
+        return
+    pr := PrizeProgress(wk)
+    if (!pr.total || pr.got < pr.total)
+        return
+    if (!now && IniRead(STATS_FILE, "Stats", "OwnedNotice", "") = WeekKey() "_" wk)
+        return
+    IniWrite(WeekKey() "_" wk, STATS_FILE, "Stats", "OwnedNotice")
+    msg := Tx("You own all of week {1}'s prizes. Only gizmos and Pirate Shop Access can still drop for you this week.", wk)
+    Notify("🎁 " Tx("All prizes owned"), msg)
+    Discord("🎁 " msg)
+}
+
+; ============================================================
+; v7.8: odds calculator (Epic's official per-chest odds, 7 Nov 2026)
+; ============================================================
+ShowOddsCalc(owner := 0) {
+    g := ThemeGui(TITLE " - " Tx("Odds calculator"))
+    hrs := Round(Max(1, totalMinutes / 60 / Max(1, Integer(IniRead(STATS_FILE, "Stats", "Runs", 1)))), 1)
+    mph := (totalMinutes > 60) ? Round(totalMatches / (totalMinutes / 60), 1) : 2.5
+    daysLeft := Max(1, DateDiff("20261205235959", A_Now, "Days") + 1)
+    UiText(g, "x20 y16 w520", Tx("A rough guess of what your squad's chests could give you. Epic says every player has the same odds per chest. Lobby Loop doesn't change them."), "muted")
+    fields := [["hours", Tx("Hours per night"), Min(hrs, 12)], ["nights", Tx("Nights left"), daysLeft], ["mph", Tx("Matches per hour"), mph],
+               ["chests", Tx("Chests your squad opens per match (guess)"), 15]]
+    ed := Map()
+    for f in fields {
+        UiText(g, "x20 y+12 w300", f[2])
+        ed[f[1]] := UiEdit(g, "x330 yp-3 w120 r1", f[3])
+    }
+    out := UiText(g, "x20 y+16 w520 r8", "")
+    calc(*) {
+        n := 1
+        for k in ["hours", "nights", "mph", "chests"] {
+            v := Trim(ed[k].Value)
+            n *= IsNumber(v) ? Max(0, Number(v)) : 0
+        }
+        n := Round(n)
+        p(oneIn) => Round((1 - (1 - 1 / oneIn) ** n) * 100, n > 0 && oneIn > 100000 ? 2 : 0)
+        out.Value := Tx("About {1} chests.", FormatNumber(n)) "`n"
+            . "🧭 " Tx("Gizmos: about {1}", Round(n / 127)) "`n"
+            . "🖼️ " Tx("A loading screen: {1}%", p(272)) "    🎵 " Tx("A Jam Track: {1}%", p(391)) "`n"
+            . "⛏️ " Tx("A pickaxe or back bling: {1}%", p(568)) "    🚗 " Tx("A car: {1}%", p(7813)) "`n"
+            . "🏴‍☠️ " Tx("Pirate Shop Access: {1}%", p(137500)) "    👑 " Tx("Gold outfit: {1}%", p(1562500)) "`n`n"
+            . Tx("Odds: 1 in 127 gizmo, 272 loading screen, 391 Jam Track, 568 pickaxe/back bling, 7,813 car, 137,500 Pirate Shop Access, 1,562,500 Gold outfit (Epic, 7 Nov 2026). Treasure Hours raise some of them.")
+    }
+    for _, e in ed
+        e.OnEvent("Change", calc)
+    calc()
+    cb := UiButton(g, "x20 y+12 w140 Default", Tx("Close"))
+    cb.OnEvent("Click", (*) => g.Destroy())
+    g.OnEvent("Escape", (*) => g.Destroy())
+    if owner
+        g.Opt("+Owner" owner)
+    g.Show("w560")
+}
+
+; ============================================================
+; v7.8: game language check (all screen reading uses English words)
+; ============================================================
+GameLanguage() {
+    cfg := FortniteConfig()
+    if !FileExist(cfg)
+        return ""
+    v := IniRead(cfg, "Internationalization", "Culture", "")
+    if (v = "")
+        try if RegExMatch(FileRead(cfg), "im)^\s*Culture\s*=\s*([A-Za-z\-]+)", &m)
+            v := m[1]
+    return v                                               ; "" = not set (Fortnite follows Windows)
+}
+
+LanguageOk() {
+    v := GameLanguage()
+    return (v = "") ? "" : (SubStr(StrLower(v), 1, 2) = "en")
+}
+
+CheckLanguageOnce() {
+    if (LanguageOk() != false)
+        return
+    if (IniRead(STATS_FILE, "Stats", "LanguageWarned", "") = FormatTime(, "yyyyMMdd"))
+        return
+    IniWrite(FormatTime(, "yyyyMMdd"), STATS_FILE, "Stats", "LanguageWarned")
+    Notify(Tx("Fortnite language"), Tx("Fortnite is set to '{1}'. Lobby Loop reads English words, so set Fortnite to English (Settings > Game > Language).", GameLanguage()))
+}
+
+; ============================================================
+; v7.8: auto-clean and low disk warning
+; ============================================================
+CleanData(manual := false) {
+    static lastRun := 0
+    if (!manual && lastRun && A_TickCount - lastRun < 86400000)
+        return
+    lastRun := A_TickCount
+    removed := 0
+    ; proof screenshots
+    pd := Integer(S["CLEAN_PROOF_DAYS"])
+    if (pd > 0) {
+        limit := DateAdd(A_Now, -pd, "Days")
+        loop files DATA_DIR "\" BASE "_treasure_proof\*.png" {
+            if (A_LoopFileTimeModified < limit) {
+                try FileDelete(A_LoopFileFullPath)
+                removed += 1
+            }
+        }
+    }
+    ; old rows in the match / run / teammate lists (treasure finds are always kept)
+    days := Integer(S["CLEAN_DAYS"])
+    if (days > 0) {
+        from := FormatTime(DateAdd(A_Now, -Max(14, days), "Days"), "yyyy-MM-dd")
+        for f in [MATCHES_FILE, HISTORY_FILE, TEAMMATES_FILE] {
+            if !FileExist(f)
+                continue
+            txt := FileRead(f, "UTF-8"), out := "", cut := 0
+            for i, line in StrSplit(txt, "`n", "`r") {
+                if (line = "")
+                    continue
+                if (i > 1 && RegExMatch(line, "^(\d{4}-\d{2}-\d{2})", &m) && StrCompare(m[1], from) < 0) {
+                    cut += 1
+                    continue
+                }
+                out .= line "`r`n"
+            }
+            if cut {
+                try {
+                    FileDelete(f)
+                    FileAppend(out, f, "UTF-8")
+                    removed += cut
+                }
+            }
+        }
+    }
+    ; log size
+    maxMB := Max(1, Number(S["LOG_MAX_MB"]))
+    if (FileExist(LOG_FILE) && FileGetSize(LOG_FILE) > maxMB * 1048576) {
+        try {
+            t := FileRead(LOG_FILE, "UTF-8")
+            t := SubStr(t, StrLen(t) // 2)
+            FileDelete(LOG_FILE)
+            FileAppend("(older lines removed by auto-clean)`r`n" t, LOG_FILE, "UTF-8")
+            removed += 1
+        }
+    }
+    if removed
+        Log("Auto-clean removed " removed " old items")
+    if manual
+        ShowTip(Tx("Cleaned {1} old items.", removed), 2500)
+}
+
+DiskCheck() {
+    static lastWarn := 0
+    minGB := Number(S["DISK_MIN_GB"])
+    if (minGB <= 0 || (lastWarn && A_TickCount - lastWarn < 21600000))
+        return
+    for path in [DATA_DIR, ClipFolder()] {
+        try free := DriveGetSpaceFree(SubStr(path, 1, 3))
+        catch
+            continue
+        if (free < minGB * 1024) {
+            lastWarn := A_TickCount
+            msg := Tx("Only {1} GB free on {2}.", Round(free / 1024, 1), SubStr(path, 1, 2)) (S["TREASURE_CLIP"] ? " " Tx("Clips may fail to save.") : "")
+            Log("Low disk: " msg)
+            Notify("💾 " Tx("Low disk space"), msg)
+            Discord("💾 " msg)
+            return
+        }
+    }
+}
+
+; ============================================================
+; v7.8: settings search
+; ============================================================
+SettingsSearch(box, pages, navs, *) {
+    q := Trim(box.Value)
+    if (StrLen(q) < 2)
+        return
+    hits := []
+    for i, pg in pages {
+        for ctrl in pg {
+            try t := ctrl.Text
+            catch
+                continue
+            if InStr(t, q) {
+                hits.Push(i)
+                break
+            }
+        }
+    }
+    for i, n in navs                                       ; pages with a match get a dot
+        n.Text := RegExReplace(n.Text, "  •$") (HasValue(hits, i) ? "  •" : "")
+    if hits.Length
+        SettingsNav(hits[1], pages, navs)
+}
+
+HasValue(arr, v) {
+    for x in arr
+        if (x = v)
+            return true
+    return false
+}
+
+; ============================================================
+; v7.8: first-run checklist (+ the trust panel)
+; ============================================================
+TRUST_TEXT() => Tx("Lobby Loop is free and open source (github.com/yensobased1/lobby-loop). It has no login, no remote access and never asks for your Epic password. Your Discord links stay in your settings file on this PC. It does not change your odds: Epic gives every player the same odds per chest. Epic's rules ban cheats and exploits and can ban accounts, so use it at your own risk.")
+
+ShowChecklist(owner := 0) {
+    IniWrite(1, STATS_FILE, "Stats", "ChecklistShown")
+    g := ThemeGui(TITLE " - " Tx("Setup checklist"))
+    UiText(g, "x20 y16 w600", "📋 " Tx("Setup checklist"), "title")
+    wm := FortniteWindowMode(), lang := LanguageOk()
+    items := [
+        [wm = 1, Tx("Fortnite on Windowed Fullscreen"), wm = 1 ? "" : Tx("Set it"), (*) => FixWindowMode(g)],
+        [lang != false, Tx("Fortnite language: {1}", GameLanguage() != "" ? GameLanguage() : Tx("same as Windows")), "", ""],
+        ["?", Tx("Fortnite Sleep Mode: Never (Settings > Game > Energy Saving)"), "", ""],
+        [StrLower(S["MODE_FILL"]) = "fill", Tx("Team Fill check: Fill"), StrLower(S["MODE_FILL"]) = "fill" ? "" : Tx("Turn on"), (*) => (SetSetting("MODE_FILL", "fill"), g.Destroy(), ShowChecklist())],
+        [S["LOBBY_AFTER_MATCH"] = 1, Tx("After a match: Return to lobby (prize screens)"), S["LOBBY_AFTER_MATCH"] ? "" : Tx("Turn on"), (*) => (SetSetting("LOBBY_AFTER_MATCH", 1), g.Destroy(), ShowChecklist())],
+        [DiscordReady() || Trim(S["NTFY_TOPIC"]) != "", Tx("Alerts on your phone (Discord or ntfy)"), Tx("Set up"), (*) => (g.Destroy(), OpenSettings(10))],
+        [A_IsAdmin = 1, Tx("Running as Administrator"), A_IsAdmin ? "" : Tx("Restart as admin"), (*) => RestartAsAdmin()],
+        ["?", Tx("Keys: {1} start / stop, {2} settings, {3} self-test", HK_TOGGLE, HK_SETTINGS, HK_TEST), Tx("Change"), (*) => (g.Destroy(), OpenSettings(8))]]
+    for it in items {
+        icon := (it[1] = "?") ? "•" : (it[1] ? "✅" : "⚠️")
+        UiText(g, "x20 y+10 w30", icon)
+        UiText(g, "x50 yp w430", it[2])
+        if (it[3] != "") {
+            b := UiButton(g, "x490 yp-4 w130", it[3])
+            b.OnEvent("Click", it[4])
+        }
+    }
+    UiText(g, "x20 y+18 w600", "🛡️ " Tx("Trust"), "head")
+    UiText(g, "x20 y+4 w600", TRUST_TEXT(), "muted")
+    ob := UiButton(g, "x20 y+16 w260", "🌙 " Tx("Overnight treasure farm"))
+    ob.OnEvent("Click", (*) => (g.Destroy(), ApplyOvernightPreset()))
+    cb := UiButton(g, "x+10 yp w140 Default", Tx("Close"))
+    cb.OnEvent("Click", (*) => g.Destroy())
+    g.OnEvent("Escape", (*) => g.Destroy())
+    if owner
+        g.Opt("+Owner" owner)
+    g.Show("w640")
+}
+
+FixWindowMode(g) {
+    if ProcessExist(GameExe()) {
+        MsgBox(Tx("Close Fortnite first, then press Set it again. (Or in Fortnite: Settings > Display > Window Mode > Windowed Fullscreen.)"), TITLE, "Iconi Owner" g.Hwnd)
+        return
+    }
+    try {
+        for k in ["FullscreenMode", "LastConfirmedFullscreenMode", "PreferredFullscreenMode"]
+            IniWrite(1, FortniteConfig(), FN_SECTION(), k)
+        Log("Window mode set to Windowed Fullscreen")
+    }
+    g.Destroy()
+    ShowChecklist()
+}
+
+RestartAsAdmin() {
+    try {
+        if A_IsCompiled
+            Run('*RunAs "' A_ScriptFullPath '"')
+        else
+            Run('*RunAs "' A_AhkPath '" "' A_ScriptFullPath '"')
+        ExitApp()
+    }
 }
