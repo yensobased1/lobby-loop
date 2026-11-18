@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop Zen
 ;@Ahk2Exe-SetDescription Lobby Loop Zen
-;@Ahk2Exe-SetVersion 7.6.0
+;@Ahk2Exe-SetVersion 7.7.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop Zen"
-VERSION := "7.6"
+VERSION := "7.7"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,20 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.7  (18 Nov 2026)",
+    "  + Treasure words update by themselves from GitHub (new weekly prize names)",
+    "  + Stop after the match when you find Pirate Shop Access (or any treasure),",
+    "    so the prize is safe. Then your stop action (sleep, shut down...)",
+    "  + Lobby proof: screenshots the UNLOCKED! treasure screen, then clicks Claim All",
+    "  + Known Fortnite popups (disconnected, server not responding, removed...)",
+    "    are clicked by themselves, no teaching needed",
+    "  + Counts how often you're kicked for being idle and warns you",
+    "  + Checks Fortnite's servers before reopening it (waits during outages)",
+    "  + Checks Fortnite is on Windowed Fullscreen",
+    "  + FPS saver: Fortnite runs at 30 FPS while Lobby Loop runs, yours comes back after",
+    "  + Laptop battery guard (optional): stop or sleep when the battery is low",
+    "  + Settings: treasure split into Treasure and Alerts & clips",
+    "",
     "v7.6  (18 Nov 2026)",
     "  Lobby Loop is made for AFKing in squad fills: your teammates farm chests",
     "  for you while you bot.",
@@ -216,6 +230,11 @@ DEFAULTS := [
     ["TREASURE_COSMETIC_WORDS", "SOLID GOLD", "This week's cosmetic prize names. Any other YOU FOUND prize also counts as a cosmetic"],
     ["TREASURE_TOKEN", 1, "1 = look for Pirate Shop Access (the pirate token)"],
     ["TREASURE_TOKEN_WORDS", "PIRATE SHOP ACCESS,SHOP ACCESS,!PIRATE SHOP ACCESS UNLOCKED", "Pirate Shop Access words. ! = counts even without the YOU FOUND banner"],
+    ["TREASURE_ONLINE", 1, "1 = get the newest treasure words from GitHub (weekly prize names)"],
+    ["TREASURE_ONLINE_VERSION", "", "Version of the online treasure words in use (set by itself)"],
+    ["TREASURE_WORDS_URL", "", "Where to get the treasure words (blank = Lobby Loop's GitHub)"],
+    ["TREASURE_STOP", "off", "Stop after the match when you find: off, token (Pirate Shop Access) or any"],
+    ["TREASURE_PROOF", 1, "1 = on the lobby UNLOCKED! treasure screen, save a screenshot, then click Claim All"],
     ["TREASURE_FOUND_WORDS", "YOU FOUND,TREASURE FOUND", "Fortnite's prize banner (top of the screen). Treasure only counts when this is on screen (blank = any line)"],
     ["TREASURE_NOTIFY", 1, "1 = Windows notification when treasure is found"],
     ["TREASURE_BEEP", 1, "1 = play a sound when treasure is found"],
@@ -238,6 +257,12 @@ DEFAULTS := [
     ["STREAM_HIDE", 0, "1 = hide the status box from OBS, streams and screenshots"],
     ["AUTO_CLAIM", 1, "1 = click buttons that just say Continue, Collect, Claim, Accept..."],
     ["SPECTATE_IDLE", 1, "1 = stop moving while you're spectating teammates"],
+    ["KNOWN_POPUPS", 1, "1 = click known Fortnite popups by itself (disconnected, server not responding...)"],
+    ["CHECK_SERVERS", 1, "1 = check Fortnite's servers before reopening Fortnite (waits during outages)"],
+    ["FPS_SAVER", 0, "1 = Fortnite at 30 FPS while Lobby Loop runs (your setting comes back after)"],
+    ["BATTERY_GUARD", 0, "1 = stop when a laptop battery gets low"],
+    ["BATTERY_MIN", 20, "Battery % that counts as low"],
+    ["BATTERY_SLEEP", 0, "1 = also put the PC to sleep when the battery is low"],
     ["WAKE_FROM_SLEEP", 1, "1 = click Keep Playing when Fortnite goes into Sleep Mode, and keep it from falling asleep while waiting"],
     ["WAIT_FOR_SQUAD", 1, "1 = don't click Play Again while you're spectating, so you keep treasure your teammates find"],
     ["SCREEN_READER_SECONDS", 10, "How often the screen reader looks at the screen, in seconds"],
@@ -416,6 +441,10 @@ modeRecheckTick := 0
 modeWarned := false
 lastNudgeTick := 0     ; last tiny camera move that keeps Fortnite out of Sleep Mode
 sleepWakes := 0        ; times we clicked Keep Playing this run
+stopAfterFind := ""    ; treasure found: stop when this match ends
+idleKicksRun := 0
+totalIdleKicks := Integer(IniRead(STATS_FILE, "Stats", "IdleKicks", 0))
+fpsWaiting := false    ; FPS saver waits for Lobby Loop to open Fortnite
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
@@ -424,7 +453,9 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "SLIDE_CHANCE", "CROUCH_CHANCE", "STRAFE_CHANCE", "SWAP_CHANCE", "LOOK_CHANCE", "IDLE_CHANCE", "IDLE_MIN",
                "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
-               "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
+               "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "TREASURE_ONLINE",
+               "TREASURE_STOP", "TREASURE_PROOF", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
+               "BATTERY_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
                "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
 CheckSafeMode()
@@ -540,6 +571,11 @@ SetTimer(BotPoll, 6000)
 SetTimer(ScreenReaderTick, 1000)
 SetTimer(LiveTick, 60000)
 GdipStart()
+SetTimer(() => UpdateTreasureWords(), -8000)
+SetTimer(() => UpdateTreasureWords(), 21600000)          ; and every 6 hours
+SetTimer(CheckWindowModeOnce, -15000)
+if !running
+    FpsRestoreLater()                                    ; put your FPS back if Lobby Loop closed while it was set
 
 ; ---------- Startup ----------
 ShowTip(Tx("{1} loaded.", TITLE " v" VERSION) "`n" Tx("{1} = start/stop   {2} = settings   {3} = self-test", HK_TOGGLE, HK_SETTINGS, HK_TEST), 5000)
@@ -614,7 +650,7 @@ ValidKey(keyName) {
 }
 
 ToggleRun(reason := "you") {
-    global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned, lastNudgeTick, sleepWakes
+    global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned, lastNudgeTick, sleepWakes, stopAfterFind, idleKicksRun
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
     global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries
     autoStartArmed := false
@@ -654,7 +690,11 @@ ToggleRun(reason := "you") {
         if S["KEEP_AWAKE"]
             KeepAwake(true)
         lobbyVisit := false, modeChecked := false, modeRecheckTick := 0, modeWarned := false
-        lastNudgeTick := A_TickCount, sleepWakes := 0
+        lastNudgeTick := A_TickCount, sleepWakes := 0, stopAfterFind := "", idleKicksRun := 0
+        SetTimer(FpsRestoreTick, 0)
+        FpsApply()
+        if fpsWaiting
+            ShowTip(Tx("FPS saver starts the next time Lobby Loop opens Fortnite."), 3500)
         if S["BLACKOUT_ON_START"]
             ToggleBlackout(true)
         gameState := ""
@@ -670,6 +710,7 @@ ToggleRun(reason := "you") {
             SetGameVolume(100)
         KeepAwake(false)
         ToggleBlackout(false)
+        FpsRestoreLater()
         runMs := A_TickCount - sessionStart
         totalMinutes += runMs / 60000
         IniWrite(Round(totalMinutes, 1), STATS_FILE, "Stats", "TotalMinutes")
@@ -726,6 +767,8 @@ SelfTest() {
     rows.Push([isActive ? ok : "⚠️", isActive ? Tx("Fortnite is the active window") : Tx("Click into Fortnite before starting")])
     rows.Push([A_IsAdmin ? ok : no, Tx("Running as Administrator")])
     rows.Push([info, Tx("Fortnite Sleep Mode: set it to Never (Settings > Game > Energy Saving)"), true])
+    wm := FortniteWindowMode()
+    rows.Push([wm = 1 ? ok : (wm = "" ? info : "⚠️"), SubStr(WindowModeText(), 3), wm = ""])
     txt := "Fortnite window: " (hasWin ? "found" : "NOT found") ", active: " (isActive ? "yes" : "no") ", admin: " (A_IsAdmin ? "yes" : "NO")
     for name in ["lobby", "end"] {
         t0 := A_TickCount
@@ -944,7 +987,7 @@ SettingsNav(index, pages, navs, *) {
 SettingsForgetPopup(index, g, *) {
     ForgetPopup(index)
     g.Destroy()
-    OpenSettings(8)
+    OpenSettings(9)
 }
 
 SettingsImportCode(g, code) {
@@ -1047,6 +1090,7 @@ ApplyStartSchedule() {
 ScheduleWatch() {
     global startAtNext, goneSince
     WatchTick()
+    BatteryCheck()
     ; daily Discord summary
     sumT := Trim(String(S["DAILY_SUMMARY_TIME"]))
     if (sumT != "" && DiscordReady() && (ck := ParseClock(sumT))) {
@@ -1219,8 +1263,13 @@ TryLaunch() {
         SetStatus("Stopped: Fortnite didn't open")
         return
     }
+    if ((why := ServersDown()) != "") {
+        ServersDownNotice(why)
+        return
+    }
     launchTries += 1
     launchTick := A_TickCount
+    FpsApply()
     Log("Opening Fortnite (try " launchTries ")")
     Discord("Fortnite isn't running, opening it (try " launchTries ")")
     Notify("Fortnite", Tx("Fortnite isn't running. Opening it (try {1}).", launchTries))
@@ -1245,6 +1294,10 @@ Unstick() {
         if (!FindButton("end") && !FindButton("lobby") && !AnyPopupVisible())
             Send("{Esc}")                                  ; close the menu Esc may have opened
         lastProgress := A_TickCount - mins * 60000 + 300000 ; check again in 5 minutes
+    } else if (unstickTries = 3 && (why := ServersDown()) != "") {
+        unstickTries := 2                                  ; servers are down: don't restart, check again later
+        ServersDownNotice(why)
+        lastProgress := A_TickCount
     } else if (unstickTries = 3 && S["LAUNCH_FORTNITE"]) {
         Discord("Still stuck, restarting Fortnite")
         SetStatus("Still stuck, restarting Fortnite")
@@ -1654,6 +1707,47 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "3 times this run. Try the Chill profile or more movement.", "3 مرات في هذا التشغيل. جرّب ملف Chill أو حركة أكثر.",
+        "Alerts & clips", "التنبيهات والمقاطع",
+        "Also put the PC to sleep", "وضع الكمبيوتر في السكون أيضًا",
+        "Any treasure", "أي كنز",
+        "Battery % that counts as low:", "نسبة البطارية التي تُعتبر منخفضة:",
+        "Check Fortnite's servers first (wait during outages)", "افحص خوادم Fortnite أولًا (انتظر أثناء الأعطال)",
+        "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "اضغط على نوافذ Fortnite المعروفة تلقائيًا (انقطع الاتصال، الخادم لا يستجيب، تمت الإزالة...)",
+        "Clips", "المقاطع",
+        "Closed a Fortnite popup ({1})", "تم إغلاق نافذة Fortnite ({1})",
+        "Couldn't download the treasure words. Check your internet.", "تعذر تنزيل كلمات الكنوز. تحقق من الإنترنت.",
+        "Couldn't read Fortnite's settings file", "تعذرت قراءة ملف إعدادات Fortnite",
+        "FPS saver starts the next time Lobby Loop opens Fortnite.", "يبدأ موفر الإطارات في المرة القادمة التي يفتح فيها Lobby Loop لعبة Fortnite.",
+        "FPS saver: Fortnite at 30 FPS while running (yours comes back after)", "موفر الإطارات: Fortnite على 30 إطارًا أثناء التشغيل (يعود إعدادك بعد ذلك)",
+        "Fortnite is Windowed. Windowed Fullscreen works best.", "Fortnite في وضع النافذة. وضع ملء الشاشة بنافذة يعمل أفضل.",
+        "Fortnite is on Fullscreen. Switch to Windowed Fullscreen (Settings > Display > Window Mode).", "Fortnite في وضع ملء الشاشة. انتقل إلى ملء الشاشة بنافذة (الإعدادات > العرض > وضع النافذة).",
+        "Fortnite is on Windowed Fullscreen", "Fortnite على ملء الشاشة بنافذة",
+        "Fortnite servers look down", "يبدو أن خوادم Fortnite متوقفة",
+        "Fortnite servers look down, waiting", "يبدو أن خوادم Fortnite متوقفة، في الانتظار",
+        "Fortnite window mode", "وضع نافذة Fortnite",
+        "Found it!", "وجدته!",
+        "Get the newest words online (weekly prize names)", "احصل على أحدث الكلمات من الإنترنت (أسماء الجوائز الأسبوعية)",
+        "Keep it safe", "احفظه بأمان",
+        "Kicked for being idle", "طُردت بسبب الخمول",
+        "Kicked for being idle: {1} times so far.", "طُردت بسبب الخمول: {1} مرات حتى الآن.",
+        "Laptop: stop when the battery is low", "الحاسوب المحمول: توقف عندما تنخفض البطارية",
+        "Lobby Loop stops after this match ends, so the prize is safe.", "يتوقف Lobby Loop بعد انتهاء هذه المباراة، لتبقى الجائزة بأمان.",
+        "Lobby proof: screenshot the UNLOCKED! screen, then click Claim All", "إثبات الردهة: التقط شاشة UNLOCKED! ثم اضغط Claim All",
+        "Never", "أبدًا",
+        "Online words: {1}", "الكلمات من الإنترنت: {1}",
+        "Open proof screenshots", "فتح لقطات الإثبات",
+        "Saved proof, clicked {1}", "تم حفظ الإثبات، تم الضغط على {1}",
+        "Spots the prizes your squad finds in chests, and keeps them safe.", "يرصد الجوائز التي يجدها فريقك في الصناديق ويحفظها بأمان.",
+        "Starts the next time Lobby Loop opens Fortnite. Your FPS comes back once Fortnite closes after the run.", "يبدأ في المرة القادمة التي يفتح فيها Lobby Loop لعبة Fortnite. يعود إعداد الإطارات بعد إغلاق Fortnite عقب التشغيل.",
+        "Stop after the match when I find:", "توقف بعد المباراة عندما أجد:",
+        "Stopped: battery {1}%", "توقف: البطارية {1}%",
+        "Stopped: found {1}", "توقف: تم العثور على {1}",
+        "Then it does your stop action (Settings > Play).", "ثم ينفذ إجراء التوقف الخاص بك (الإعدادات > اللعب).",
+        "Treasure words updated ({1}).", "تم تحديث كلمات الكنوز ({1}).",
+        "Update the words now", "حدّث الكلمات الآن",
+        "What happens when treasure is found.", "ما يحدث عند العثور على كنز.",
+        "not downloaded yet", "لم تُنزّل بعد",
         "Wake Fortnite from Sleep Mode (clicks Keep Playing)", "إيقاظ Fortnite من وضع السكون (يضغط Keep Playing)",
         "Best: in Fortnite go to Settings > Game > Energy Saving and set Sleep Mode to Never.", "الأفضل: في Fortnite اذهب إلى الإعدادات > اللعبة > توفير الطاقة واضبط وضع السكون على Never.",
         "Show the status box", "إظهار مربع الحالة",
@@ -1838,7 +1932,6 @@ LoadTranslations() {
         "Phone control", "التحكم من الهاتف",
         "Look", "المظهر",
         "How long it runs and what happens after.", "مدة التشغيل وما يحدث بعدها.",
-        "Start by itself, every day or with Windows.", "التشغيل تلقائيًا، كل يوم أو مع Windows.",
         "Comfort and stats while it runs.", "راحة وإحصائيات أثناء التشغيل.",
         "Messages, screenshots and a daily summary in your channel.", "رسائل ولقطات شاشة وملخص يومي في قناتك.",
         "Control Lobby Loop from Discord on your phone (optional).", "تحكم في Lobby Loop من Discord على هاتفك (اختياري).",
@@ -1973,7 +2066,6 @@ LoadTranslations() {
         "Your Fortnite keys (change them if you don't use the defaults):", "مفاتيح Fortnite الخاصة بك (غيّرها إن لم تستخدم الافتراضية):",
         "Forward", "للأمام",
         "Left", "يسار",
-        "Back", "رجوع",
         "Right", "يمين",
         "Jump", "قفز",
         "Sprint", "ركض",
@@ -2643,7 +2735,7 @@ HandleCommand(text, authorId := "") {
                 . "⏰ ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight```n"
                 . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
                 . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
-                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any```n"
+                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!servers```n"
                 . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
@@ -2705,7 +2797,7 @@ HandleCommand(text, authorId := "") {
         case "stats":
             avg := AveragePlace()
             Discord(who "📊 all time: **" totalMatches "** matches, **" Round(totalMinutes / 60, 1) " h**, **" FormatNumber(totalXP) "** XP"
-                . (bestPlace ? ", best #" bestPlace : "") (avg ? ", average #" avg : "") ", 🏴‍☠️ " treasureCount " treasures")
+                . (bestPlace ? ", best #" bestPlace : "") (avg ? ", average #" avg : "") ", 🏴‍☠️ " treasureCount " treasures, 💤 kicked for idle " totalIdleKicks "x")
         case "week":
             wk := WeekStats()
             Discord(who "📅 last 7 days: **" wk.matches "** matches, **" Floor(wk.minutes / 60) "h " Mod(Round(wk.minutes), 60) "m**"
@@ -2784,6 +2876,9 @@ HandleCommand(text, authorId := "") {
                 if (StrLen(all) < 1500 && StrLen(ln.text) >= 3)
                     all .= ln.text " · "
             Discord(who "🔎 on screen: " (all != "" ? all : "no text found"))
+        case "servers":
+            why := ServersDown()
+            Discord(who (why != "" ? "🛑 Fortnite servers look down: **" why "**" : "✅ Fortnite servers look fine") " (status.epicgames.com)")
         case "cancel":
             if (pendingAction != "") {
                 ToggleRun()                                   ; cancels the countdown
@@ -3204,7 +3299,7 @@ ScreenReaderTick() {
     }
     if (!running || !WinActive(S["GAME_WINDOW"]))
         return
-    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"] && !S["WAKE_FROM_SLEEP"])
+    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"] && !S["WAKE_FROM_SLEEP"] && !S["KNOWN_POPUPS"])
         return
     if (A_TickCount - lastOcrTick < (S["WATCH_TREASURE"] ? 3 : Max(5, S["SCREEN_READER_SECONDS"])) * 1000)
         return
@@ -3245,6 +3340,10 @@ HandleScreenText(txt) {
     }
     if S["WATCH_TREASURE"]
         CheckTreasure(lines)
+    if (S["WATCH_TREASURE"] && LobbyProof(lines, joined))
+        return
+    if KnownPopup(lines, joined)
+        return
     if (S["AUTO_CLAIM"] && gameState != "spectating" && A_TickCount - lastClaimTick > 10000) {
         for ln in lines {
             u := Trim(StrUpper(ln.text))
@@ -4200,6 +4299,11 @@ MainLoop() {
             gotCrops := SaveResultCrops()
         if (S["SCREENSHOT_EVERY_MATCH"] && DiscordReady())
             shot := TakeScreenshot()
+        if (stopAfterFind != "") {
+            OnMatchEnd(gotCrops, shot)
+            StopIfFound("end")
+            return
+        }
         limit := Integer(S["MATCH_LIMIT"])
         if (limit > 0 && matches + 1 >= limit) {
             OnMatchEnd(gotCrops, shot)
@@ -4216,6 +4320,8 @@ MainLoop() {
 
     ; lobby: mode check, then Ready / Play
     if (A_TickCount - lastClick["lobby"] >= S["CLICK_COOLDOWN"] && FindButton("lobby")) {
+        if StopIfFound("lobby")
+            return
         if !lobbyVisit {                                ; just got to the lobby
             lobbyVisit := true
             modeChecked := false, modeRecheckTick := 0
@@ -4385,6 +4491,7 @@ CheckTreasure(lines) {
             continue                                        ; Pirate Shop Access screens stay up: count it once
         seen[k] := A_TickCount
         TreasureFound(Trim(h[1]), h[2])
+        TreasureStopCheck(Trim(h[1]), h[2])
         break                                               ; one find per screen
     }
 }
@@ -4730,10 +4837,10 @@ OpenSettings(startPage := 1) {
     g.Add("Text", "x0 y0 w200 h660 Background" UiCol("side"))
     UiText(g, "x20 y18 w170", "🔁 " TITLE, "head", UiCol("side"))
     UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
-    sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"],
+    sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"], ["🎬", "Alerts & clips"],
                  ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"], ["🔗", "Share & tools"]]
     for i, sec in sections {
-        n := g.Add("Text", "x10 y" (78 + (i - 1) * 44) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " StrReplace(Tx(sec[2]), "&", "&&"))
+        n := g.Add("Text", "x10 y" (72 + (i - 1) * 40) " w180 h35 0x200 Background" UiCol("side"), "   " sec[1] "   " StrReplace(Tx(sec[2]), "&", "&&"))
         n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
         navs.Push(n)
     }
@@ -4818,6 +4925,7 @@ OpenSettings(startPage := 1) {
     hint(Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
     tick("AUTO_START", "Start by itself when I click into Fortnite", "y+14")
     tick("LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)")
+    tick("CHECK_SERVERS", "Check Fortnite's servers first (wait during outages)")
     tick("START_WITH_WINDOWS", "Start with Windows")
 
     ; ---- 5. Extras ----
@@ -4831,28 +4939,52 @@ OpenSettings(startPage := 1) {
     tick("NOTIFY", "Windows notifications (stopped, stuck, crashed)")
     tick("STREAM_HIDE", "Hide the status box from OBS / streams / screenshots")
     hint(Tx("On some PCs this also hides it from your screen. Turn it off if the status box disappears."))
+    tick("FPS_SAVER", "FPS saver: Fortnite at 30 FPS while running (yours comes back after)", "y+12")
+    hint(Tx("Starts the next time Lobby Loop opens Fortnite. Your FPS comes back once Fortnite closes after the run."))
+    tick("BATTERY_GUARD", "Laptop: stop when the battery is low", "y+12")
+    say(Tx("Battery % that counts as low:"), "y+4 Section", 280)
+    edit("BATTERY_MIN", "y+4 w120")
+    c["BATTERY_SLEEP"] := addAll(UiCheck(g, "xs+" COL2 " ys+22", Tx("Also put the PC to sleep"), S["BATTERY_SLEEP"], 260))
+    hint(WindowModeText(), "y+16")
 
     ; ---- 6. Treasure ----
-    newPage(Tx("Treasure"), Tx("Spots treasure on screen and tells you, with a screenshot or a clip."))
-    tick("WATCH_TREASURE", "Watch for treasure", "y+14")
-    add(UiText(g, "x" CX " y+14 w300 Section", Tx("What to look for"), "head"))
-    add(UiText(g, "xs y+10 w300", Tx("Prize banner (must be on screen)")))
+    newPage(Tx("Treasure"), Tx("Spots the prizes your squad finds in chests, and keeps them safe."))
+    tick("WATCH_TREASURE", "Watch for treasure", "y+12")
+    tick("TREASURE_ONLINE", "Get the newest words online (weekly prize names)", "y+6")
+    add(UiText(g, "x" CX " y+12 w300 Section", Tx("What to look for"), "head"))
+    add(UiText(g, "xs y+8 w300", Tx("Prize banner (must be on screen)")))
     c["TREASURE_FOUND_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_FOUND_WORDS"]))
     for item in [["TREASURE_TOKEN", "Pirate Shop Access (pirate token)"], ["TREASURE_GIZMO", "Gizmos (Sprite Locator, Lucky Locator...)"],
                  ["TREASURE_COSMETIC", "Weekly treasure cosmetics (and any other prize)"]] {
-        c[item[1]] := addAll(UiCheck(g, "xs y+10", Tx(item[2]), S[item[1]], 280))
+        c[item[1]] := addAll(UiCheck(g, "xs y+9", Tx(item[2]), S[item[1]], 280))
         c[item[1] "_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S[item[1] "_WORDS"]))
     }
-    add(UiText(g, "xs y+10 w300", Tx("My own words")))
+    add(UiText(g, "xs y+9 w300", Tx("My own words")))
     c["TREASURE_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_WORDS"]))
     add(UiText(g, "xs y+4 w300", Tx("Separate words with commas. Start a word with ! to count it without the banner."), "muted"))
-    add(UiText(g, "xs+" COL2 " ys w300", Tx("When I find treasure"), "head"))
+    add(UiText(g, "xs+" COL2 " ys w300", Tx("Keep it safe"), "head"))
+    add(UiText(g, "xs+" COL2 " y+8 w300", Tx("Stop after the match when I find:")))
+    st := add(UiDDL(g, "xs+" COL2 " y+4 w300", [Tx("Never"), Tx("Pirate Shop Access"), Tx("Any treasure")]))
+    st.Choose(StrLower(S["TREASURE_STOP"]) = "token" ? 2 : StrLower(S["TREASURE_STOP"]) = "any" ? 3 : 1)
+    c["TREASURE_STOP"] := st
+    add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Then it does your stop action (Settings > Play)."), "muted"))
+    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("Lobby proof: screenshot the UNLOCKED! screen, then click Claim All"), S["TREASURE_PROOF"], 276))
+    uw := add(UiButton(g, "xs+" COL2 " y+14 w300", "🌐 " Tx("Update the words now")))
+    uw.OnEvent("Click", (*) => SettingsUpdateWords(g))
+    add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Online words: {1}", S["TREASURE_ONLINE_VERSION"] != "" ? S["TREASURE_ONLINE_VERSION"] : Tx("not downloaded yet")), "muted"))
+    add(UiText(g, "xs+" COL2 " y+14 w300", Tx("Recent finds"), "head"))
+    add(UiText(g, "xs+" COL2 " y+2 w300 r4", RecentTreasureText(4), "muted"))
+
+    ; ---- 7. Alerts & clips ----
+    newPage(StrReplace(Tx("Alerts & clips"), "&", "&&"), Tx("What happens when treasure is found."))
+    add(UiText(g, "x" CX " y+16 w300 Section", Tx("When I find treasure"), "head"))
     first := true
     for item in [["TREASURE_NOTIFY", "Windows notification"], ["TREASURE_BEEP", "Play a sound"], ["TREASURE_DISCORD", "Tell Discord"],
                  ["TREASURE_SCREENSHOT", "Add a screenshot"], ["TREASURE_CLIP", "Save a clip (20 s before + 5 s after)"]] {
-        c[item[1]] := addAll(UiCheck(g, "xs+" COL2 (first ? " y+10" : " y+6"), Tx(item[2]), S[item[1]], 270))
+        c[item[1]] := addAll(UiCheck(g, "xs" (first ? " y+10" : " y+8"), Tx(item[2]), S[item[1]], 270))
         first := false
     }
+    add(UiText(g, "xs+" COL2 " ys w300", Tx("Clips"), "head"))
     add(UiText(g, "xs+" COL2 " y+10 w300", Tx("Clip with")))
     cm := add(UiDDL(g, "xs+" COL2 " y+4 w300", [Tx("Windows Game Bar (Win+Alt+G)"), Tx("NVIDIA (Alt+F10)"), Tx("My own clip key (Medal, OBS...)")]))
     cm.Choose(StrLower(S["CLIP_METHOD"]) = "nvidia" ? 2 : StrLower(S["CLIP_METHOD"]) = "custom" ? 3 : 1)
@@ -4863,12 +4995,13 @@ OpenSettings(startPage := 1) {
     c["CLIP_DELAY"] := add(UiEdit(g, "x+10 yp w145 r1", S["CLIP_DELAY"]))
     c["CLIP_UPLOAD"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Tx("Send the clip to Discord (if under 10 MB)"), S["CLIP_UPLOAD"], 270))
     add(UiText(g, "xs+" COL2 " y+6 w300", Tx("Set your recorder's clip length to 25 seconds (Game Bar: 30)."), "muted"))
-    add(UiText(g, "x" CX " y474 w" CW, Tx("Recent finds"), "head"))
-    add(UiText(g, "x" CX " y+2 w" CW " r2", RecentTreasureText(2), "muted"))
-    rb := add(UiButton(g, "x" CX " y+6 w250", "🔎 " Tx("Read the screen now")))
+    add(UiText(g, "x" CX " y380 w" CW, Tx("Tools"), "head"))
+    rb := add(UiButton(g, "x" CX " y+8 w250", "🔎 " Tx("Read the screen now")))
     rb.OnEvent("Click", (*) => (g.Destroy(), ShowScreenText(4000)))
     tc := add(UiButton(g, "x+10 yp w200", "🎬 " Tx("Test the clip key")))
     tc.OnEvent("Click", (*) => SettingsTestClip(g, c))
+    pf := add(UiButton(g, "x" CX " y+8 w250", "📁 " Tx("Open proof screenshots")))
+    pf.OnEvent("Click", (*) => (DirCreate(A_ScriptDir "\" BASE "_treasure_proof"), Run(A_ScriptDir "\" BASE "_treasure_proof")))
 
     ; ---- 7. Hotkeys ----
     newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
@@ -4886,8 +5019,10 @@ OpenSettings(startPage := 1) {
 
     ; ---- 8. Popups ----
     newPage(Tx("Popups"), Tx("Buttons you taught with {1}. They're clicked whenever they show up.", HK_TEACH))
+    tick("KNOWN_POPUPS", "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "y+14")
+    hint(Tx("Kicked for being idle: {1} times so far.", totalIdleKicks))
     if !POPUPS.Length
-        hint(Tx("No popup buttons learned yet."), "y+18")
+        hint(Tx("No popup buttons learned yet."), "y+14")
     for i, p in POPUPS {
         pw := Round((p.r - p.l) * A_ScreenWidth), ph := Round((p.b - p.t) * A_ScreenHeight)
         add(g.Add("Text", "x" CX " y+" (i = 1 ? 18 : 10) " w22 h22 Background" Format("{:06X}", p.color)))
@@ -4897,7 +5032,7 @@ OpenSettings(startPage := 1) {
     }
     if POPUPS.Length {
         fa := add(UiButton(g, "x" CX " y+18 w200", Tx("Forget all")))
-        fa.OnEvent("Click", (*) => (ForgetPopups(), g.Destroy(), OpenSettings(8)))
+        fa.OnEvent("Click", (*) => (ForgetPopups(), g.Destroy(), OpenSettings(9)))
     }
     hint(Tx("To teach one: hover over an empty part of the popup's button and press {1}. To forget the one under the mouse: Shift+{1}.", HK_TEACH), "y+18")
 
@@ -5060,6 +5195,7 @@ SaveSettingsGui(g, c) {
         return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
     try {
         nums := Map("MATCH_LIMIT", num("MATCH_LIMIT", Tx("Stop after this many matches (0 = no limit):"), 0, 10000),
+                    "BATTERY_MIN", num("BATTERY_MIN", Tx("Battery % that counts as low:"), 5, 95),
                     "GAME_VOLUME", num("GAME_VOLUME", Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), 0, 100),
                     "CLIP_DELAY", num("CLIP_DELAY", Tx("Wait (seconds)"), 0, 60),
                     "AUTO_SCREENSHOT_MIN", num("AUTO_SCREENSHOT_MIN", Tx("Screenshot to Discord every (minutes, 0 = off):"), 0, 1440))
@@ -5103,7 +5239,8 @@ SaveSettingsGui(g, c) {
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
-                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
+                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF",
+                "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
                 "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
@@ -5119,6 +5256,9 @@ SaveSettingsGui(g, c) {
     SetSetting("MODE_BUILD", ["any", "build", "zerobuild"][c["MODE_BUILD"].Value])
     SetSetting("MODE_FILL", ["any", "fill", "nofill"][c["MODE_FILL"].Value])
     SetSetting("MODE_ACTION", c["MODE_ACTION"].Value = 2 ? "ready" : "wait")
+    SetSetting("TREASURE_STOP", ["off", "token", "any"][c["TREASURE_STOP"].Value])
+    if !S["FPS_SAVER"]
+        FpsRestoreLater()
     watchMinutes := nums["AUTO_SCREENSHOT_MIN"]
     if (c["START_WITH_WINDOWS"].Value != (S["START_WITH_WINDOWS"] ? 1 : 0))
         SetStartWithWindows(c["START_WITH_WINDOWS"].Value)
@@ -5215,4 +5355,348 @@ AntiSleepNudge() {
     Look(dx, 0, 3)
     Sleep(150)
     Look(-dx, 0, 3)
+}
+
+
+; ============================================================
+; v7.7: online treasure words (from GitHub, so weekly prize names update by themselves)
+; treasure_words.txt looks like:  version=2026-11-18 / token=... / gizmo=... / cosmetic=... / banner=...
+; ============================================================
+TreasureWordsUrl() {
+    u := Trim(String(S["TREASURE_WORDS_URL"]))
+    return (u != "") ? u : "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/treasure_words.txt"
+}
+
+UpdateTreasureWords(manual := false) {
+    if (!S["TREASURE_ONLINE"] && !manual)
+        return false
+    tmp := A_Temp "\ll_treasure_words.txt"
+    try {
+        try FileDelete(tmp)
+        Download(TreasureWordsUrl() "?t=" A_TickCount, tmp)
+        txt := FileRead(tmp, "UTF-8")
+    } catch {
+        Log("Couldn't download the treasure words")
+        if manual
+            ShowTip(Tx("Couldn't download the treasure words. Check your internet."), 3500)
+        return false
+    }
+    vals := Map()
+    for line in StrSplit(txt, "`n", "`r")
+        if RegExMatch(line, "^[ \t]*(\w+)[ \t]*=[ \t]*(.*?)[ \t]*$", &m)
+            vals[StrLower(m[1])] := m[2]
+    if !vals.Has("version") {
+        Log("treasure_words.txt has no version= line")
+        return false
+    }
+    if (!manual && vals["version"] = String(S["TREASURE_ONLINE_VERSION"]))
+        return false                                   ; already have these
+    changed := 0
+    for pair in [["token", "TREASURE_TOKEN_WORDS"], ["gizmo", "TREASURE_GIZMO_WORDS"], ["cosmetic", "TREASURE_COSMETIC_WORDS"], ["banner", "TREASURE_FOUND_WORDS"]]
+        if (vals.Has(pair[1]) && vals[pair[1]] != String(S[pair[2]])) {
+            SetSetting(pair[2], vals[pair[1]])
+            changed += 1
+        }
+    SetSetting("TREASURE_ONLINE_VERSION", vals["version"])
+    Log("Treasure words updated to " vals["version"] " (" changed " lists changed)")
+    if (changed || manual)
+        ShowTip(Tx("Treasure words updated ({1}).", vals["version"]), 3500)
+    return true
+}
+
+; ============================================================
+; v7.7: stop after the match when you find something (so the prize is safe)
+; ============================================================
+TreasureStopCheck(text, cat) {
+    global stopAfterFind
+    rule := StrLower(String(S["TREASURE_STOP"]))
+    if (rule = "off" || !running || stopAfterFind != "")
+        return
+    if (rule = "token" && (!IsObject(cat) || cat.key != "token"))
+        return
+    stopAfterFind := text
+    Log("Will stop after this match (found: " text ")")
+    Notify("🏴‍☠️ " Tx("Found it!"), Tx("Lobby Loop stops after this match ends, so the prize is safe."))
+    Discord("🏴‍☠️ Found **" text "**. Lobby Loop stops after this match ends (it won't leave early).")
+}
+
+; Called where Play Again would be clicked, and in the lobby. Returns true if it stopped.
+StopIfFound(where) {
+    global stopAfterFind
+    if (stopAfterFind = "")
+        return false
+    found := stopAfterFind
+    stopAfterFind := ""
+    ToggleRun("found " found)
+    SetStatus("🏴‍☠️ " Tx("Stopped: found {1}", found))
+    StartStopAction()
+    return true
+}
+
+; ============================================================
+; v7.7: lobby proof: when the lobby shows an UNLOCKED! treasure screen, save a screenshot first,
+;       then click Claim All
+; ============================================================
+LobbyProof(lines, joined) {
+    global lastClaimTick, clicks
+    static lastProof := 0
+    if (!S["TREASURE_PROOF"] || A_TickCount - lastProof < 20000 || !InStr(joined, "UNLOCKED"))
+        return false
+    isTreasure := InStr(joined, "PIRATE SHOP ACCESS")
+    if !isTreasure
+        for cat in TreasureCategories()
+            for w in cat.words
+                if (StrLen(LTrim(w, "!")) >= 6 && InStr(joined, LTrim(w, "!"))) {
+                    isTreasure := true
+                    break
+                }
+    if !isTreasure
+        return false
+    btn := ""
+    for ln in lines {
+        u := Trim(StrUpper(ln.text))
+        if (u = "CLAIM ALL" || u = "CLAIM" || u = "CLAIM REWARD" || u = "COLLECT")
+            btn := ln
+    }
+    if !IsObject(btn)
+        return false
+    lastProof := A_TickCount
+    dir := A_ScriptDir "\" BASE "_treasure_proof"
+    try DirCreate(dir)
+    shot := dir "\" FormatTime(, "yyyy-MM-dd_HH-mm-ss") ".png"
+    saved := SaveRegionImage(shot, 0, 0, A_ScreenWidth, A_ScreenHeight)
+    Log("Lobby proof " (saved ? "saved: " shot : "screenshot failed"))
+    if (saved && DiscordReady())
+        DiscordFile("🏴‍☠️ **Treasure unlocked** on " PlayerName() "'s account. Proof screenshot, clicking " btn.text " now.", shot)
+    if !WinActive(S["GAME_WINDOW"])                    ; may have just stopped for this find: still claim it
+        return true
+    Sleep(400)
+    ReleaseAll()
+    MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
+    Sleep(180)
+    Click()
+    clicks += 1
+    lastClaimTick := A_TickCount
+    Log("Lobby proof: clicked '" btn.text "'")
+    SetStatus("📸 " Tx("Saved proof, clicked {1}", btn.text))
+    return true
+}
+
+; ============================================================
+; v7.7: known popups (no teaching needed) and the kicked-for-idle counter
+; ============================================================
+KnownPopup(lines, joined) {
+    global clicks, lastProgress, idleKicksRun, totalIdleKicks
+    static lastHit := 0
+    if (!S["KNOWN_POPUPS"] || A_TickCount - lastHit < 8000)
+        return false
+    ctx := ""
+    for w in ["DISCONNECTED", "CONNECTION LOST", "LOST CONNECTION", "SERVER NOT RESPONDING", "UNABLE TO CONNECT", "MATCHMAKING ERROR",
+              "LOGIN FAILED", "REMOVED FROM THE MATCH", "REMOVED FROM MATCH", "REMOVED FROM THE GAME", "KICKED", "INACTIVITY",
+              "IDLE TOO LONG", "SOMETHING WENT WRONG", "ERROR CODE", "TRY AGAIN LATER", "NETWORK ERROR", "SERVERS ARE"]
+        if InStr(joined, w) {
+            ctx := w
+            break
+        }
+    if (ctx = "")
+        return false
+    btn := ""
+    for want in ["RECONNECT", "TRY AGAIN", "RETRY", "OKAY", "OK", "CONTINUE", "RETURN TO LOBBY", "CLOSE"] {
+        for ln in lines
+            if (Trim(StrUpper(ln.text)) = want) {
+                btn := ln
+                break
+            }
+        if IsObject(btn)
+            break
+    }
+    if !IsObject(btn)
+        return false
+    lastHit := A_TickCount
+    idle := InStr(joined, "INACTIV") || InStr(joined, "IDLE") || InStr(joined, "AFK")
+    if idle {
+        idleKicksRun += 1
+        totalIdleKicks += 1
+        IniWrite(totalIdleKicks, STATS_FILE, "Stats", "IdleKicks")
+        Log("Kicked for being idle (" idleKicksRun " this run)")
+        if (idleKicksRun = 3) {
+            Notify(Tx("Kicked for being idle"), Tx("3 times this run. Try the Chill profile or more movement."))
+            Discord("⚠️ Kicked for being idle **3 times** this run. Try more movement (Settings > Play > Profile).")
+        }
+    } else {
+        Log("Known popup: " ctx)
+        if !SendScreenshot("⚠️ Fortnite popup (**" ctx "**), clicking " btn.text ":")
+            Discord("⚠️ Fortnite popup (**" ctx "**), clicking " btn.text)
+    }
+    if !(running && WinActive(S["GAME_WINDOW"]))
+        return true
+    ReleaseAll()
+    MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
+    Sleep(180)
+    Click()
+    clicks += 1
+    lastProgress := A_TickCount
+    SetStatus("🧩 " Tx("Closed a Fortnite popup ({1})", btn.text))
+    return true
+}
+
+; ============================================================
+; v7.7: Fortnite server status (status.epicgames.com), checked before reopening Fortnite
+; ============================================================
+ServersDown() {
+    static cache := "", cacheTick := 0
+    if !S["CHECK_SERVERS"]
+        return ""
+    if (cacheTick && A_TickCount - cacheTick < 300000)
+        return cache
+    cacheTick := A_TickCount
+    cache := ""
+    res := HttpJson("GET", "https://status.epicgames.com/api/v2/summary.json")
+    if (res.status != 200)
+        return ""                                       ; can't tell: don't block anything
+    t := res.text
+    pos := 1
+    while (pos := RegExMatch(t, '"name":"([^"]*)","status":"(\w+)"', &m, pos)) {
+        pos += m.Len
+        nm := StrUpper(m[1]), st := m[2]
+        if (st = "major_outage" && (InStr(nm, "FORTNITE") || InStr(nm, "LOGIN") || InStr(nm, "MATCHMAKING") || InStr(nm, "GAME SERVICES")))
+            return cache := m[1] " (major outage)"
+    }
+    pos := 1
+    while (pos := RegExMatch(t, '"name":"([^"]*Fortnite[^"]*)","status":"(investigating|identified|in_progress|verifying)"', &m, pos)) {
+        pos += m.Len
+        return cache := m[1]
+    }
+    return ""
+}
+
+ServersDownNotice(why) {
+    static lastSent := 0
+    SetStatus("🛑 " Tx("Fortnite servers look down, waiting"))
+    if (A_TickCount - lastSent > 1800000) {
+        lastSent := A_TickCount
+        Log("Fortnite servers look down: " why)
+        Discord("🛑 Fortnite servers look down (**" why "**). Waiting instead of reopening Fortnite.")
+        Notify(Tx("Fortnite servers look down"), why)
+    }
+}
+
+; ============================================================
+; v7.7: Fortnite's own settings file (window mode check and the FPS saver)
+; ============================================================
+FortniteConfig() {
+    return EnvGet("LOCALAPPDATA") "\FortniteGame\Saved\Config\WindowsClient\GameUserSettings.ini"
+}
+
+FN_SECTION() => "/Script/FortniteGame.FortGameUserSettings"
+
+; 0 = fullscreen, 1 = windowed fullscreen, 2 = windowed, "" = unknown
+FortniteWindowMode() {
+    cfg := FortniteConfig()
+    if !FileExist(cfg)
+        return ""
+    v := IniRead(cfg, FN_SECTION(), "FullscreenMode", "")
+    return IsNumber(v) ? Integer(v) : ""
+}
+
+WindowModeText() {
+    m := FortniteWindowMode()
+    return (m = 1) ? "✅ " Tx("Fortnite is on Windowed Fullscreen")
+         : (m = 0) ? "⚠️ " Tx("Fortnite is on Fullscreen. Switch to Windowed Fullscreen (Settings > Display > Window Mode).")
+         : (m = 2) ? "⚠️ " Tx("Fortnite is Windowed. Windowed Fullscreen works best.")
+         : "• " Tx("Couldn't read Fortnite's settings file")
+}
+
+CheckWindowModeOnce() {
+    if (IniRead(STATS_FILE, "Stats", "WindowModeWarned", "") = FormatTime(, "yyyyMMdd"))
+        return
+    if (FortniteWindowMode() = 0 || FortniteWindowMode() = 2) {
+        IniWrite(FormatTime(, "yyyyMMdd"), STATS_FILE, "Stats", "WindowModeWarned")
+        Notify(Tx("Fortnite window mode"), WindowModeText())
+        Log("Window mode warning: " FortniteWindowMode())
+    }
+}
+
+; FPS saver: 30 FPS while Lobby Loop runs. Fortnite only reads the file when it starts and writes
+; it back when it closes, so the limit is set while Fortnite is closed (before Lobby Loop opens it)
+; and your own value is put back once Fortnite has closed after the run.
+FpsApply() {
+    global fpsWaiting
+    if !S["FPS_SAVER"]
+        return false
+    cfg := FortniteConfig()
+    if !FileExist(cfg)
+        return false
+    if ProcessExist(GameExe()) {
+        if (IniRead(cfg, FN_SECTION(), "FrameRateLimit", "") != "30.000000")
+            fpsWaiting := true                          ; applies the next time Lobby Loop opens Fortnite
+        return false
+    }
+    if (IniRead(STATS_FILE, "FpsSaver", "Original", "__none__") = "__none__")
+        IniWrite(IniRead(cfg, FN_SECTION(), "FrameRateLimit", "0.000000"), STATS_FILE, "FpsSaver", "Original")
+    try {
+        IniWrite("30.000000", cfg, FN_SECTION(), "FrameRateLimit")
+        fpsWaiting := false
+        Log("FPS saver: Fortnite set to 30 FPS (yours is saved)")
+        return true
+    } catch as e {
+        Log("FPS saver couldn't write Fortnite's settings: " e.Message)
+    }
+    return false
+}
+
+FpsRestoreTick() {
+    if running
+        return                                          ; keep 30 FPS while running
+    if ProcessExist(GameExe())
+        return                                          ; Fortnite writes its settings when it closes: wait
+    orig := IniRead(STATS_FILE, "FpsSaver", "Original", "__none__")
+    SetTimer(FpsRestoreTick, 0)
+    if (orig = "__none__")
+        return
+    try {
+        IniWrite(orig, FortniteConfig(), FN_SECTION(), "FrameRateLimit")
+        IniDelete(STATS_FILE, "FpsSaver", "Original")
+        Log("FPS saver: your Fortnite frame limit is back (" orig ")")
+    } catch as e {
+        Log("FPS saver couldn't restore: " e.Message)
+    }
+}
+
+FpsRestoreLater() {
+    if (IniRead(STATS_FILE, "FpsSaver", "Original", "__none__") != "__none__")
+        SetTimer(FpsRestoreTick, 5000)
+}
+
+; ============================================================
+; v7.7: laptop battery guard
+; ============================================================
+BatteryStatus() {
+    buf := Buffer(12, 0)
+    if !DllCall("GetSystemPowerStatus", "Ptr", buf)
+        return 0
+    flag := NumGet(buf, 1, "UChar")
+    return {onBattery: NumGet(buf, 0, "UChar") = 0, percent: NumGet(buf, 2, "UChar"), noBattery: (flag = 128 || flag = 255)}
+}
+
+BatteryCheck() {
+    if (!S["BATTERY_GUARD"] || !running)
+        return
+    b := BatteryStatus()
+    if (!IsObject(b) || b.noBattery || !b.onBattery || b.percent > Number(S["BATTERY_MIN"]))
+        return
+    Log("Battery low: " b.percent "% on battery")
+    Discord("🔋 Battery at **" b.percent "%** and not charging. Stopping" (S["BATTERY_SLEEP"] ? " and putting the PC to sleep." : "."))
+    ToggleRun("battery " b.percent "%")
+    SetStatus("🔋 " Tx("Stopped: battery {1}%", b.percent))
+    if S["BATTERY_SLEEP"]
+        StartPowerAction("sleep")
+}
+
+SettingsUpdateWords(g) {
+    ok := UpdateTreasureWords(true)
+    g.Destroy()
+    OpenSettings(6)
+    if !ok
+        ShowTip(Tx("Couldn't download the treasure words. Check your internet."), 3500)
 }

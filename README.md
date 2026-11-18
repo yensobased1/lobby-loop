@@ -10,6 +10,8 @@
 - 🤝 **Squad fill:** stops moving while you spectate teammates and clicks reward buttons by itself
 - 🏴‍☠️ **Treasure watcher:** Sprite gizmos, weekly treasure cosmetics, pirate tokens, with a sound, a screenshot and a clip of the 20 seconds before
 - ⚙️ **Extras:** stop after X matches, keep the PC awake, Fortnite volume, hide the status box from streams
+- 🛡️ **Overnight safety:** wakes Fortnite from Sleep Mode, clicks known error popups, checks Fortnite's servers before reopening it, FPS (frames per second) saver, laptop battery guard
+- 🌐 **Online treasure words:** weekly prize names come from [`treasure_words.txt`](treasure_words.txt), so they update without a new version
 - 🚶 **Human-like movement:** walks, sprints, slides, crouches, strafes, jumps, dives, swaps weapons and looks around
 - 🧙 **Setup wizard** and **profiles** (Overnight, Quick 1 hour, Chill)
 - 🌍 **English / العربية**

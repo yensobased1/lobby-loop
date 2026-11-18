@@ -1,0 +1,9 @@
+; Lobby Loop treasure words. Lobby Loop downloads this file by itself (Settings > Treasure).
+; Change the version when you change the words, so everyone picks them up.
+; Words are separated by commas. Start a word with ! to count it without Fortnite's YOU FOUND banner.
+; Fortnite: Treasure Hunters (1 Nov - about 5 Dec 2026)
+version=2026-11-18
+banner=YOU FOUND,TREASURE FOUND
+token=PIRATE SHOP ACCESS,SHOP ACCESS,!PIRATE SHOP ACCESS UNLOCKED
+gizmo=SPRITE LOCATOR,LUCKY LOCATOR,GOLDEN FIREWORK,EXTRACTION ACCELERATOR,PORTABLE EXTRACTOR
+cosmetic=SOLID GOLD
