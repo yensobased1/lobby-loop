@@ -25,7 +25,7 @@
 - ⬆️ **Auto-updates** from this repo, and **Start with Windows**
 
 ## 🚀 How to use
-1. Download **`lobby_loop.exe`** (or the `.ahk` if you have [AutoHotkey v2](https://www.autohotkey.com/)).
+1. Download **`lobby_loop.exe`** (no AutoHotkey needed). Using the `.ahk` instead? Put **`start_lobby_loop.bat`** next to it and double-click that: it installs [AutoHotkey v2](https://www.autohotkey.com/) for you if it's missing.
 2. Open Fortnite in **Windowed Fullscreen** and go to the lobby.
 3. Double-click Lobby Loop and click **Yes**.
 4. Press **F12** to set the timer (optional), then **F8** to start.
