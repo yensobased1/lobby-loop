@@ -26,8 +26,9 @@ CHANGELOG := [
     "  + Treasure words update by themselves from GitHub (new weekly prize names)",
     "  + Stop after the match when you find Pirate Shop Access (or any treasure),",
     "    so the prize is safe. Then your stop action (sleep, shut down...)",
-    "  + After each match it goes back to the lobby (prize banners and claim screens",
-    "    only show there), waits a few seconds for them, then readies up",
+    "  + Settings > Play > After a match: Play Again (faster) or Return to lobby",
+    "    (prize banners and claim screens only show there). Settings that need the",
+    "    lobby say so under them",
     "  + Lobby proof: screenshots the prize / UNLOCKED! screen, then clicks Claim",
     "  + Known Fortnite popups (disconnected, server not responding, removed...)",
     "    are clicked by themselves, no teaching needed",
@@ -238,7 +239,7 @@ DEFAULTS := [
     ["TREASURE_ONLINE_VERSION", "", "Version of the online treasure words in use (set by itself)"],
     ["TREASURE_WORDS_URL", "", "Where to get the treasure words (blank = Lobby Loop's GitHub)"],
     ["TREASURE_STOP", "off", "Stop after the match when you find: off, token (Pirate Shop Access) or any"],
-    ["LOBBY_AFTER_MATCH", 1, "1 = after each match go back to the lobby instead of Play Again (prize screens only show in the lobby)"],
+    ["LOBBY_AFTER_MATCH", 1, "After a match: 1 = Return to lobby (prize screens only show there), 0 = Play Again (faster)"],
     ["LOBBY_PRIZE_WAIT", 8, "Seconds to wait in the lobby for prize screens before readying up"],
     ["TREASURE_PROOF", 1, "1 = on the lobby UNLOCKED! treasure screen, save a screenshot, then click Claim All"],
     ["TREASURE_FOUND_WORDS", "YOU FOUND,TREASURE FOUND", "Fortnite's prize banner (top of the screen). Treasure only counts when this is on screen (blank = any line)"],
@@ -1723,6 +1724,13 @@ LoadTranslations() {
         "Check Fortnite's servers first (wait during outages)", "افحص خوادم Fortnite أولًا (انتظر أثناء الأعطال)",
         "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "اضغط على نوافذ Fortnite المعروفة تلقائيًا (انقطع الاتصال، الخادم لا يستجيب، تمت الإزالة...)",
         "Clips", "المقاطع",
+        "After a match:", "بعد المباراة:",
+        "Play Again (faster)", "Play Again (أسرع)",
+        "Return to lobby (shows prizes)", "العودة إلى الردهة (تُظهر الجوائز)",
+        "Prize banners and claim screens only show in the lobby, so treasure needs Return to lobby.", "لافتات الجوائز وشاشات الاستلام تظهر في الردهة فقط، لذا تحتاج الكنوز إلى العودة إلى الردهة.",
+        "Needs Return to lobby (Settings > Play > After a match)", "يتطلب العودة إلى الردهة (الإعدادات > اللعب > بعد المباراة)",
+        "now: Play Again", "الآن: Play Again",
+        "Lobby proof: screenshot the prize screen, then click Claim", "إثبات الردهة: التقط شاشة الجائزة ثم اضغط Claim",
         "After each match, go back to the lobby (prize screens only show there)", "بعد كل مباراة، ارجع إلى الردهة (شاشات الجوائز تظهر هناك فقط)",
         "Back to the lobby to check for prizes", "العودة إلى الردهة للبحث عن الجوائز",
         "Checking for prize screens...", "جارٍ البحث عن شاشات الجوائز...",
@@ -4332,7 +4340,7 @@ MainLoop() {
             StartStopAction()
             return
         }
-        if (S["LOBBY_AFTER_MATCH"] && S["WATCH_TREASURE"] && ReturnToLobbyClick()) {
+        if (S["LOBBY_AFTER_MATCH"] && ReturnToLobbyClick()) {
             lastClick["end"] := A_TickCount
             gameState := "end"
             backToLobbyUntil := A_TickCount + 45000
@@ -4875,6 +4883,7 @@ OpenSettings(startPage := 1) {
     c := Map()
     pages := []
     navs := []
+    lobbyNotes := []                                  ; "needs Return to lobby" notes, updated live
     CW := 620                                         ; content width
     CX := 230                                         ; content left edge
     COL2 := 320                                       ; second column offset
@@ -4906,6 +4915,11 @@ OpenSettings(startPage := 1) {
     tick(key, label, opts := "y+8", width := 0) => (c[key] := addAll(UiCheck(g, "x" CX " " opts, Tx(label), S[key], width ? width : CW - 30)))
     say(text, opts := "y+12", width := 0) => add(UiText(g, "x" CX " " opts " w" (width ? width : CW), text))
     hint(text, opts := "y+3") => add(UiText(g, "x" CX " " opts " w" CW, text, "muted"))
+    lobbyNote(opts) {
+        t := add(UiText(g, opts " w300", LobbyNoteText(S["LOBBY_AFTER_MATCH"]), "muted"))
+        lobbyNotes.Push(t)
+        return t
+    }
     edit(key, opts := "y+4 w200", value := "") => (c[key] := add(UiEdit(g, "x" CX " " opts " r1", value != "" ? value : S[key])))
     choice(key, items, keys, opts := "y+4 w260") {
         d := add(UiDDL(g, "x" CX " " opts, items))
@@ -4930,6 +4944,12 @@ OpenSettings(startPage := 1) {
     c["ACTION"] := add(UiDDL(g, "x" CX " y+4 w300", ActionLabels()))
     c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
     hint(Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE))
+    say(Tx("After a match:"), "y+12")
+    am := add(UiDDL(g, "x" CX " y+4 w300", [Tx("Play Again (faster)"), Tx("Return to lobby (shows prizes)")]))
+    am.Choose(S["LOBBY_AFTER_MATCH"] ? 2 : 1)
+    am.OnEvent("Change", (*) => UpdateLobbyNotes(lobbyNotes, am.Value = 2))
+    c["LOBBY_AFTER_MATCH"] := am
+    hint(Tx("Prize banners and claim screens only show in the lobby, so treasure needs Return to lobby."))
     say(Tx("Stop after this many matches (0 = no limit):"), "y+12")
     edit("MATCH_LIMIT", "y+4 w120")
     say(Tx("Your name (for Discord and the leaderboard):"), "y+12")
@@ -4998,6 +5018,7 @@ OpenSettings(startPage := 1) {
     tick("WATCH_TREASURE", "Watch for treasure", "y+12")
     tick("TREASURE_ONLINE", "Get the newest words online (weekly prize names)", "y+6")
     add(UiText(g, "x" CX " y+12 w300 Section", Tx("What to look for"), "head"))
+    lobbyNote("xs y+2")
     add(UiText(g, "xs y+8 w300", Tx("Prize banner (must be on screen)")))
     c["TREASURE_FOUND_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_FOUND_WORDS"]))
     for item in [["TREASURE_TOKEN", "Pirate Shop Access (pirate token)"], ["TREASURE_GIZMO", "Gizmos (Sprite Locator, Lucky Locator...)"],
@@ -5009,13 +5030,13 @@ OpenSettings(startPage := 1) {
     c["TREASURE_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_WORDS"]))
     add(UiText(g, "xs y+4 w300", Tx("Separate words with commas. Start a word with ! to count it without the banner."), "muted"))
     add(UiText(g, "xs+" COL2 " ys w300", Tx("Keep it safe"), "head"))
+    lobbyNote("xs+" COL2 " y+2")
     add(UiText(g, "xs+" COL2 " y+8 w300", Tx("Stop after the match when I find:")))
     st := add(UiDDL(g, "xs+" COL2 " y+4 w300", [Tx("Never"), Tx("Pirate Shop Access"), Tx("Any treasure")]))
     st.Choose(StrLower(S["TREASURE_STOP"]) = "token" ? 2 : StrLower(S["TREASURE_STOP"]) = "any" ? 3 : 1)
     c["TREASURE_STOP"] := st
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Then it does your stop action (Settings > Play)."), "muted"))
-    c["LOBBY_AFTER_MATCH"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("After each match, go back to the lobby (prize screens only show there)"), S["LOBBY_AFTER_MATCH"], 276))
-    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Tx("Lobby proof: screenshot the UNLOCKED! screen, then click Claim All"), S["TREASURE_PROOF"], 276))
+    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("Lobby proof: screenshot the prize screen, then click Claim"), S["TREASURE_PROOF"], 276))
     uw := add(UiButton(g, "xs+" COL2 " y+10 w300", "🌐 " Tx("Update the words now")))
     uw.OnEvent("Click", (*) => SettingsUpdateWords(g))
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Online words: {1}", S["TREASURE_ONLINE_VERSION"] != "" ? S["TREASURE_ONLINE_VERSION"] : Tx("not downloaded yet")), "muted"))
@@ -5027,6 +5048,7 @@ OpenSettings(startPage := 1) {
     ; ---- 7. Alerts & clips ----
     newPage(StrReplace(Tx("Alerts & clips"), "&", "&&"), Tx("What happens when treasure is found."))
     add(UiText(g, "x" CX " y+16 w300 Section", Tx("When I find treasure"), "head"))
+    lobbyNote("xs y+2")
     first := true
     for item in [["TREASURE_NOTIFY", "Windows notification"], ["TREASURE_BEEP", "Play a sound"], ["TREASURE_DISCORD", "Tell Discord"],
                  ["TREASURE_SCREENSHOT", "Add a screenshot"], ["TREASURE_CLIP", "Save a clip (20 s before + 5 s after)"]] {
@@ -5290,7 +5312,7 @@ SaveSettingsGui(g, c) {
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
-                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF", "LOBBY_AFTER_MATCH",
+                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF",
                 "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
                 "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
@@ -5308,6 +5330,7 @@ SaveSettingsGui(g, c) {
     SetSetting("MODE_FILL", ["any", "fill", "nofill"][c["MODE_FILL"].Value])
     SetSetting("MODE_ACTION", c["MODE_ACTION"].Value = 2 ? "ready" : "wait")
     SetSetting("TREASURE_STOP", ["off", "token", "any"][c["TREASURE_STOP"].Value])
+    SetSetting("LOBBY_AFTER_MATCH", c["LOBBY_AFTER_MATCH"].Value = 2 ? 1 : 0)
     if !S["FPS_SAVER"]
         FpsRestoreLater()
     watchMinutes := nums["AUTO_SCREENSHOT_MIN"]
@@ -5879,4 +5902,13 @@ ReturnToLobbyClick() {
         Log("Confirmed '" ok.text "'")
     }
     return true
+}
+
+LobbyNoteText(returnOn) {
+    return "🏠 " Tx("Needs Return to lobby (Settings > Play > After a match)") (returnOn ? "  ✅" : "  ⚠️ " Tx("now: Play Again"))
+}
+
+UpdateLobbyNotes(notes, returnOn) {
+    for t in notes
+        t.Value := LobbyNoteText(returnOn)
 }
