@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.2.0
+;@Ahk2Exe-SetVersion 7.5.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.2"
+VERSION := "7.5"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,20 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.5  (18 Nov 2026)",
+    "  + Screen reader: knows when you're spectating and stops moving",
+    "  + Treasure watcher: spots Sprite gizmos, pirate tokens and other treasure,",
+    "    counts them and tells Discord (with a screenshot)",
+    "  + Clicks reward buttons by itself (Continue, Collect, Claim...)",
+    "  + Status box: mini style and accent colours (Settings > Look)",
+    "  + Live stats dashboard that refreshes while it runs",
+    "  + Settings > Popups: see and forget taught popup buttons (or Shift+F7)",
+    "  + Settings > Share & tools: settings code, report a bug, install, uninstall",
+    "  + Safe mode after a crash (extras off for that session)",
+    "  + Discord control panel: tap reactions to start, stop, screenshot",
+    "  + Live status message that shows when the PC went offline",
+    "  + 20 new phone commands (type !help)",
+    "",
     "v7.2  (17 Nov 2026)",
     "  + New status box: rounded card, status light (green running, amber paused,",
     "    grey off), stop-timer progress bar, last placement and XP",
@@ -170,6 +184,15 @@ DEFAULTS := [
     ["OVERLAY_X", 10, "Status box position when the corner is custom (set by dragging)"],
     ["OVERLAY_Y", 10, "Status box position when the corner is custom (set by dragging)"],
     ["NOTIFY", 1, "1 = Windows notifications when it stops, gets stuck or Fortnite crashes"],
+    ["OVERLAY_STYLE", "card", "Status box style: card or mini"],
+    ["ACCENT", "yellow", "Accent colour: yellow, purple, cyan, pink or green"],
+    ["WATCH_TREASURE", 1, "1 = watch the screen for treasure (gizmos, pirate tokens...)"],
+    ["TREASURE_WORDS", "GIZMO,PIRATE TOKEN,TREASURE FOUND,TREASURE UNLOCKED,NEW SPRITE,SPRITE UNLOCKED", "Words that mean you got treasure, separated by commas"],
+    ["AUTO_CLAIM", 1, "1 = click buttons that just say Continue, Collect, Claim, Accept..."],
+    ["SPECTATE_IDLE", 1, "1 = stop moving while you're spectating teammates"],
+    ["SCREEN_READER_SECONDS", 10, "How often the screen reader looks at the screen, in seconds"],
+    ["AUTO_SCREENSHOT_MIN", 0, "Send a screenshot to Discord every this many minutes (0 = off)"],
+    ["LIVE_STATUS", 0, "1 = keep a live status message in Discord (shows when the PC went offline)"],
     ["OVERLAY_SIZE", "normal", "Status box size: small, normal or large"],
     ["AUTO_START", 0, "1 = start by itself when you click into Fortnite"],
     ["START_AT_TIME", "", "Start every day at this time, e.g. 2:00 AM (blank = off)"],
@@ -235,6 +258,7 @@ HISTORY_FILE := A_ScriptDir "\" BASE "_history.csv"
 LOG_FILE := A_ScriptDir "\" BASE ".log"
 MATCHES_FILE := A_ScriptDir "\" BASE "_matches.csv"
 DASH_FILE := A_ScriptDir "\" BASE "_dashboard.html"
+TREASURE_FILE := A_ScriptDir "\" BASE "_treasure.csv"
 migrated := MigrateOldFiles()     ; first run after the rename to Lobby Loop
 
 ; Read settings; rebuild the file if it's new, missing keys, or from an older version
@@ -306,6 +330,34 @@ lastPlace := ""        ; last placement read from the end screen
 lastXP := ""
 movingOverlay := false
 testCard := ""
+gameState := ""        ; lobby, end, match or spectating
+treasureCount := Integer(IniRead(STATS_FILE, "Stats", "TreasureCount", 0))
+lastTreasure := ""
+liveMsgId := IniRead(STATS_FILE, "Stats", "LiveMsgId", "")
+panelMsgId := IniRead(STATS_FILE, "Stats", "PanelMsgId", "")
+panelSeen := Map()
+botUserId := ""
+resumeAtTick := 0
+watchMinutes := Number(S["AUTO_SCREENSHOT_MIN"])
+lastWatchShot := 0
+safeMode := false
+hadError := false
+ocrPending := false
+ocrStartTick := 0
+lastOcrTick := 0
+lastClaimTick := 0
+dashOpenTick := 0
+scriptStartTick := A_TickCount
+PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
+                ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
+SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
+               "BLACKOUT_ON_START", "READ_RESULTS", "WATCH_TREASURE", "TREASURE_WORDS", "AUTO_CLAIM", "SPECTATE_IDLE",
+               "WALK_MIN", "WALK_MAX", "COMBO_CHANCE", "SPRINT_CHANCE", "JUMP_CHANCE", "DIVE_CHANCE", "DIVE_MIN", "DIVE_MAX",
+               "SLIDE_CHANCE", "CROUCH_CHANCE", "STRAFE_CHANCE", "SWAP_CHANCE", "LOOK_CHANCE", "IDLE_CHANCE", "IDLE_MIN",
+               "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES"]
+CheckSafeMode()
+OnExit(OnExitHandler)
+OnError(OnErrorHandler)
 OV := Map()            ; status box controls
 AR := LoadTranslations()
 WIZ := Map()
@@ -345,6 +397,8 @@ HK_SETTINGS := RegisterHotkey("HOTKEY_SETTINGS", "F12", (*) => OpenSettings())
 HK_TEACH := RegisterHotkey("HOTKEY_TEACH", "F7", (*) => TeachPopup())
 HK_BLACKOUT := RegisterHotkey("HOTKEY_BLACKOUT", "F6", (*) => ToggleBlackout())
 HK_OVERLAY := RegisterHotkey("HOTKEY_OVERLAY", "F10", (*) => ToggleOverlay())
+if RegExMatch(HK_TEACH, "^\w+$")
+    try Hotkey("+" HK_TEACH, (*) => ForgetPopupUnderMouse())
 lastMsg := Tx("Press {1} to start", HK_TOGGLE)
 
 ; ---------- Tray menu ----------
@@ -359,30 +413,38 @@ for preset in [["30 minutes", 0, 30], ["1 hour", 1, 0], ["2 hours", 2, 0], ["4 h
 timerMenu.Add()
 timerMenu.Add(Tx("No limit"), QuickTimer.Bind(0, 0))
 timerMenu.Add(Tx("Custom..."), (*) => OpenSettings())
+toolsMenu := Menu()
+toolsMenu.Add(Tx("Open history (Excel)"), (*) => OpenHistory())
+toolsMenu.Add(Tx("Send screenshot to Discord"), (*) => SendScreenshot("Screenshot from " PlayerName()))
+toolsMenu.Add(Tx("Send log to Discord"), (*) => SendLog())
+toolsMenu.Add(Tx("Report a bug"), (*) => ReportBug())
+toolsMenu.Add()
+toolsMenu.Add(Tx("Keyboard shortcuts"), (*) => ShowShortcuts())
+toolsMenu.Add(Tx("Setup wizard"), (*) => StartWizard())
+toolsMenu.Add(Tx("Forget learned popup buttons"), (*) => ForgetPopups())
+toolsMenu.Add()
+toolsMenu.Add(Tx("Add Start menu and Desktop shortcuts"), (*) => InstallShortcuts())
+toolsMenu.Add(Tx("Uninstall"), (*) => Uninstall())
+toolsMenu.Add()
+toolsMenu.Add(Tx("Edit all settings (advanced)"), (*) => Run('notepad.exe "' INI_FILE '"'))
+toolsMenu.Add(Tx("Open log"), (*) => Run('notepad.exe "' LOG_FILE '"'))
 A_TrayMenu.Delete()
 trayStart := Tx("Start / Stop") "  (" HK_TOGGLE ")"
 A_TrayMenu.Add(trayStart, (*) => ToggleRun())
+A_TrayMenu.Add(Tx("Pause 15 minutes"), (*) => (PauseFor(15), ShowTip(Tx("Paused for {1} minutes.", 15), 2500)))
 A_TrayMenu.Add(Tx("Settings") "  (" HK_SETTINGS ")", (*) => OpenSettings())
 A_TrayMenu.Add(Tx("Profile"), profileMenu)
 A_TrayMenu.Add(Tx("Stop timer"), timerMenu)
 A_TrayMenu.Add(Tx("Self-test") "  (" HK_TEST ")", (*) => SelfTest())
-A_TrayMenu.Add(Tx("Setup wizard"), (*) => StartWizard())
 A_TrayMenu.Add()
 A_TrayMenu.Add(Tx("Dim screen") "  (" HK_BLACKOUT ")", (*) => ToggleBlackout())
 A_TrayMenu.Add(Tx("Show / hide status box") "  (" HK_OVERLAY ")", (*) => ToggleOverlay())
 A_TrayMenu.Add(Tx("Move status box"), (*) => MoveOverlay())
-A_TrayMenu.Add(Tx("Keyboard shortcuts"), (*) => ShowShortcuts())
 A_TrayMenu.Add()
 A_TrayMenu.Add(Tx("Stats dashboard"), (*) => OpenDashboard())
-A_TrayMenu.Add(Tx("Open history (Excel)"), (*) => OpenHistory())
-A_TrayMenu.Add(Tx("Send screenshot to Discord"), (*) => SendScreenshot("Screenshot from " PlayerName()))
-A_TrayMenu.Add(Tx("Send log to Discord"), (*) => SendLog())
-A_TrayMenu.Add()
-A_TrayMenu.Add(Tx("Forget learned popup buttons"), (*) => ForgetPopups())
+A_TrayMenu.Add(Tx("Tools"), toolsMenu)
 A_TrayMenu.Add(Tx("Check for updates"), (*) => CheckUpdate(false))
 A_TrayMenu.Add(Tx("What's new") " (v" VERSION ")", (*) => ShowWhatsNew())
-A_TrayMenu.Add(Tx("Edit all settings (advanced)"), (*) => Run('notepad.exe "' INI_FILE '"'))
-A_TrayMenu.Add(Tx("Open log"), (*) => Run('notepad.exe "' LOG_FILE '"'))
 A_TrayMenu.Add(Tx("Reload"), (*) => Reload())
 A_TrayMenu.Add()
 A_TrayMenu.Add(Tx("Exit") "  (" HK_EXIT ")", (*) => ExitScript())
@@ -398,6 +460,8 @@ ApplyStartSchedule()
 SetTimer(AutoStartWatch, 2000)
 SetTimer(ScheduleWatch, 10000)
 SetTimer(BotPoll, 6000)
+SetTimer(ScreenReaderTick, 1000)
+SetTimer(LiveTick, 60000)
 GdipStart()
 
 ; ---------- Startup ----------
@@ -406,6 +470,9 @@ if migrated
     Log("Copied " migrated " file(s) from the old Fortnite AFK version")
 Log("Loaded v" VERSION (A_IsCompiled ? " (exe)" : " (ahk)") ". Screen " A_ScreenWidth "x" A_ScreenHeight ", admin=" A_IsAdmin ", stop: " DescribeStop() ", start: " DescribeStart() ", popups: " POPUPS.Length)
 
+if safeMode
+    SetTimer(() => ShowCard("🛟 " Tx("Safe mode"), [["⚠️", Tx("Lobby Loop didn't close properly last time.")],
+        ["•", Tx("Dim screen, mute, text reading, treasure watcher, reward clicks and live status are off until you restart it."), true]], 12000), -2500)
 if !S["SETUP_DONE"] {
     IniWrite(VERSION, STATS_FILE, "Stats", "LastSeenVersion")
     StartWizard()
@@ -470,6 +537,7 @@ ValidKey(keyName) {
 }
 
 ToggleRun(reason := "you") {
+    global gameState
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
     global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries
     autoStartArmed := false
@@ -506,6 +574,9 @@ ToggleRun(reason := "you") {
             SetGameMute(true)
         if S["BLACKOUT_ON_START"]
             ToggleBlackout(true)
+        gameState := ""
+        if (S["LIVE_STATUS"] && DiscordReady())
+            SetTimer(() => LiveUpdate(), -1500)
         SetTimer(MainLoop, 50)
     } else {
         SetTimer(MainLoop, 0)
@@ -518,11 +589,13 @@ ToggleRun(reason := "you") {
         IniWrite(Round(totalMinutes, 1), STATS_FILE, "Stats", "TotalMinutes")
         SaveHistory(runMs, reason)
         SetStatus(Tx("Stopped"))
+        if (S["LIVE_STATUS"] && DiscordReady())
+            SetTimer(() => LiveUpdate(), -1500)
         summary := FormatDuration(runMs) ", " matches " match" (matches = 1 ? "" : "es")
         ShowTip(TITLE ": " Tx("OFF") "`n" Tx("This run: {1}", summary), 4000)
         if (reason != "you") {
             Discord("Stopped (" reason "). This run: " summary "`n" LeaderboardLine())
-            if (reason != "exit" && reason != "update")
+            if (reason != "exit" && reason != "update" && reason != "pause")
                 Notify(Tx("Stopped"), reason ". " Tx("This run: {1}", summary))
         }
         if S["BEEP"]
@@ -657,7 +730,15 @@ UiCol(name) {
                        "accent", "F7FE19", "edit", "26264A", "line", "33335C")
     static light := Map("bg", "F7F7FB", "side", "ECECF6", "sel", "D9D3FF", "text", "1B1B2F", "muted", "6B6B85",
                         "accent", "5B34D6", "edit", "FFFFFF", "line", "DDDDEA")
+    if (name = "accent")
+        return AccentHex()
     return DarkOn() ? dark[name] : light[name]
+}
+
+AccentHex() {
+    accents := Map("yellow", "F7FE19", "purple", "8F6BFF", "cyan", "34D5FF", "pink", "FF5FD2", "green", "3DDC84")
+    k := StrLower(String(S["ACCENT"]))
+    return accents.Has(k) ? accents[k] : "F7FE19"
 }
 
 ThemeGui(title, opts := "+AlwaysOnTop") {
@@ -762,7 +843,7 @@ ShowGuide(kind, owner := "") {
 ; ============================================================
 ; Settings window: sidebar with sections
 ; ============================================================
-OpenSettings() {
+OpenSettings(startPage := 1) {
     g := ThemeGui(TITLE " - " Tx("Settings"))
     c := Map()
     pages := []
@@ -774,9 +855,10 @@ OpenSettings() {
     g.Add("Text", "x0 y0 w200 h560 Background" UiCol("side"))
     UiText(g, "x20 y20 w170", "🔁 " TITLE, "head", UiCol("side"))
     UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
-    sections := [["🎮", "Play"], ["⏰", "Schedule"], ["✨", "Extras"], ["⌨️", "Hotkeys"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"]]
+    sections := [["🎮", "Play"], ["⏰", "Schedule"], ["✨", "Extras"], ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"],
+                 ["📱", "Phone control"], ["🎨", "Look"], ["🔗", "Share & tools"]]
     for i, sec in sections {
-        n := g.Add("Text", "x10 y" (90 + (i - 1) * 46) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
+        n := g.Add("Text", "x10 y" (86 + (i - 1) * 42) " w180 h36 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
         n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
         navs.Push(n)
     }
@@ -826,10 +908,14 @@ OpenSettings() {
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
     first := true
     for pair in [["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
-                 ["READ_RESULTS", "Read my placement and XP after each match"], ["NOTIFY", "Windows notifications (stopped, stuck, crashed)"]] {
-        c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+18" : " y+10"), Tx(pair[2]), S[pair[1]], CW - 30))
+                 ["READ_RESULTS", "Read my placement and XP after each match"], ["NOTIFY", "Windows notifications (stopped, stuck, crashed)"],
+                 ["SPECTATE_IDLE", "Stop moving while I'm spectating teammates"], ["AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)"],
+                 ["WATCH_TREASURE", "Watch for treasure (gizmos, pirate tokens...)"]] {
+        c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+16" : " y+8"), Tx(pair[2]), S[pair[1]], CW - 30))
         first := false
     }
+    add(UiText(g, "x" CX " y+14 w" CW, Tx("Treasure words (separated by commas):")))
+    c["TREASURE_WORDS"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["TREASURE_WORDS"]))
 
     ; ---- 4. Hotkeys ----
     newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
@@ -845,7 +931,24 @@ OpenSettings() {
     }
     add(UiText(g, "x" CX " y+16 w" CW, Tx("Examples: F8, Insert, Numpad0, ^!s (Ctrl+Alt+S), +F8 (Shift+F8). Lobby Loop restarts after you save."), "muted"))
 
-    ; ---- 5. Discord alerts ----
+    ; ---- 5. Popups ----
+    newPage(Tx("Popups"), Tx("Buttons you taught with {1}. They're clicked whenever they show up.", HK_TEACH))
+    if !POPUPS.Length
+        add(UiText(g, "x" CX " y+18 w" CW, Tx("No popup buttons learned yet."), "muted"))
+    for i, p in POPUPS {
+        pw := Round((p.r - p.l) * A_ScreenWidth), ph := Round((p.b - p.t) * A_ScreenHeight)
+        add(g.Add("Text", "x" CX " y+" (i = 1 ? 18 : 10) " w22 h22 Background" Format("{:06X}", p.color)))
+        add(UiText(g, "x+10 yp+2 w250", "#" i "   " pw " x " ph " px   (" Round(p.l * 100) "%, " Round(p.t * 100) "%)"))
+        fb := add(UiButton(g, "x+10 yp-4 w140", "🗑 " Tx("Forget")))
+        fb.OnEvent("Click", SettingsForgetPopup.Bind(i, g))
+    }
+    if POPUPS.Length {
+        fa := add(UiButton(g, "x" CX " y+18 w200", Tx("Forget all")))
+        fa.OnEvent("Click", (*) => (ForgetPopups(), g.Destroy(), OpenSettings(5)))
+    }
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("To teach one: hover over an empty part of the popup's button and press {1}. To forget the one under the mouse: Shift+{1}.", HK_TEACH), "muted"))
+
+    ; ---- 6. Discord alerts ----
     newPage(Tx("Discord alerts"), Tx("Messages, screenshots and a daily summary in your channel."))
     add(UiText(g, "x" CX " y+18 w" CW, Tx("Discord alert link (optional):")))
     c["HOOK"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", DiscordUrl()))
@@ -856,8 +959,11 @@ OpenSettings() {
     c["SCREENSHOT_EVERY_MATCH"] := addAll(UiCheck(g, "x" CX " y+18", Tx("Screenshot to Discord after every match"), S["SCREENSHOT_EVERY_MATCH"], CW - 30))
     add(UiText(g, "x" CX " y+16 w" CW, Tx("Daily Discord summary at (blank = off):")))
     c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200", ClockText(S["DAILY_SUMMARY_TIME"])))
+    c["LIVE_STATUS"] := addAll(UiCheck(g, "x" CX " y+14", Tx("Live status message (shows when the PC went offline)"), S["LIVE_STATUS"], CW - 30))
+    add(UiText(g, "x" CX " y+12 w" CW, Tx("Screenshot to Discord every (minutes, 0 = off):")))
+    c["AUTO_SCREENSHOT_MIN"] := add(UiEdit(g, "x" CX " y+4 w120 r1", S["AUTO_SCREENSHOT_MIN"]))
 
-    ; ---- 6. Phone control ----
+    ; ---- 7. Phone control ----
     newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
     hb2 := add(UiButton(g, "x" CX " y+14 w240", "❓ " Tx("How do I set this up?")))
     hb2.OnEvent("Click", (*) => ShowGuide("bot", g.Hwnd))
@@ -867,34 +973,67 @@ OpenSettings() {
     c["CHANNEL"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_CHANNEL_ID"]))
     add(UiText(g, "x" CX " y+12 w" CW, Tx("Your Discord user ID (only you can control it)")))
     c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
-    add(UiText(g, "x" CX " y+10 w" CW, "!start  !stop  !status  !ss  !log  !summary  !lb  !dim", "muted"))
+    pb := add(UiButton(g, "x" CX " y+12 w240", "🎛️ " Tx("Post the control panel")))
+    pb.OnEvent("Click", (*) => ShowTip(PanelCreate() ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500))
+    add(UiText(g, "x" CX " y+10 w" CW, Tx("Type !help in your channel to see all 30+ commands."), "muted"))
 
-    ; ---- 7. Look ----
+    ; ---- 8. Look ----
     newPage(Tx("Look"), Tx("Language, theme and the status box."))
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("Language")))
-    c["LANG"] := add(UiDDL(g, "x" CX " y+4 w220", ["English", "العربية"]))
+    add(UiText(g, "x" CX " y+18 w220 Section", Tx("Language")))
+    c["LANG"] := add(UiDDL(g, "xs y+4 w220", ["English", "العربية"]))
     c["LANG"].Choose(IsArabic() ? 2 : 1)
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Theme")))
-    c["THEME"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Dark"), Tx("Light")]))
+    add(UiText(g, "xs+245 ys w220", Tx("Theme")))
+    c["THEME"] := add(UiDDL(g, "xs+245 y+4 w220", [Tx("Dark"), Tx("Light")]))
     c["THEME"].Choose(DarkOn() ? 1 : 2)
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Status box corner")))
+
+    add(UiText(g, "xs y+16 w220 Section", Tx("Accent colour")))
+    accents := ["yellow", "purple", "cyan", "pink", "green"]
+    c["ACCENT"] := add(UiDDL(g, "xs y+4 w220", [Tx("Yellow"), Tx("Purple"), Tx("Cyan"), Tx("Pink"), Tx("Green")]))
+    ai := 1
+    for i, k in accents
+        if (k = StrLower(S["ACCENT"]))
+            ai := i
+    c["ACCENT"].Choose(ai)
+    add(UiText(g, "xs+245 ys w220", Tx("Status box style")))
+    c["STYLE"] := add(UiDDL(g, "xs+245 y+4 w220", [Tx("Card"), Tx("Mini")]))
+    c["STYLE"].Choose(StrLower(S["OVERLAY_STYLE"]) = "mini" ? 2 : 1)
+
+    add(UiText(g, "xs y+16 w220 Section", Tx("Status box corner")))
     corners := ["top-left", "top-right", "bottom-left", "bottom-right", "custom"]
-    c["CORNER"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right"), Tx("Where I dragged it")]))
-    mv := add(UiButton(g, "x+10 yp-1 w200", "✋ " Tx("Move status box")))
-    mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
+    c["CORNER"] := add(UiDDL(g, "xs y+4 w220", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right"), Tx("Where I dragged it")]))
     ci := 1
     for i, k in corners
         if (k = StrLower(S["OVERLAY_CORNER"]))
             ci := i
     c["CORNER"].Choose(ci)
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Status box size")))
+    add(UiText(g, "xs+245 ys w220", Tx("Status box size")))
     sizes := ["small", "normal", "large"]
-    c["SIZE"] := add(UiDDL(g, "x" CX " y+4 w220", [Tx("Small"), Tx("Normal"), Tx("Large")]))
+    c["SIZE"] := add(UiDDL(g, "xs+245 y+4 w220", [Tx("Small"), Tx("Normal"), Tx("Large")]))
     si := 2
     for i, k in sizes
         if (k = StrLower(S["OVERLAY_SIZE"]))
             si := i
     c["SIZE"].Choose(si)
+    mv := add(UiButton(g, "xs y+18 w220", "✋ " Tx("Move status box")))
+    mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
+
+    ; ---- 9. Share & tools ----
+    newPage(Tx("Share & tools"), Tx("Share your setup with friends, report bugs, install or remove."))
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("Settings code (your profile, timers, movement and look. No names or Discord links):")))
+    c["CODE"] := add(UiEdit(g, "x" CX " y+4 w" CW " r2"))
+    cb1 := add(UiButton(g, "x" CX " y+8 w225", "📋 " Tx("Copy my code")))
+    cb1.OnEvent("Click", (*) => (c["CODE"].Value := ExportCode(), ShowTip(Tx("Copied. Send it to a friend."), 2500)))
+    cb2 := add(UiButton(g, "x+10 yp w225", "📥 " Tx("Use the pasted code")))
+    cb2.OnEvent("Click", (*) => SettingsImportCode(g, c["CODE"].Value))
+    add(UiText(g, "x" CX " y+22 w" CW, Tx("Tools"), "head"))
+    t1 := add(UiButton(g, "x" CX " y+8 w225", "🐞 " Tx("Report a bug")))
+    t1.OnEvent("Click", (*) => ReportBug())
+    t2 := add(UiButton(g, "x+10 yp w225", "📌 " Tx("Add shortcuts")))
+    t2.OnEvent("Click", (*) => InstallShortcuts())
+    t3 := add(UiButton(g, "x" CX " y+8 w225", "📊 " Tx("Stats dashboard")))
+    t3.OnEvent("Click", (*) => OpenDashboard())
+    t4 := add(UiButton(g, "x+10 yp w225", "🗑️ " Tx("Uninstall")))
+    t4.OnEvent("Click", (*) => (g.Destroy(), Uninstall()))
 
     ; ---- bottom bar ----
     g.Add("Text", "x" CX " y492 w" CW " h1 Background" UiCol("line"))
@@ -904,7 +1043,7 @@ OpenSettings() {
     cancelBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
 
-    SettingsNav(1, pages, navs)
+    SettingsNav(Min(Max(1, startPage), pages.Length), pages, navs)
     g.Show("w" (CX + CW + 30) " h556")
 }
 
@@ -919,6 +1058,23 @@ SettingsNav(index, pages, navs, *) {
     }
 }
 
+SettingsForgetPopup(index, g, *) {
+    ForgetPopup(index)
+    g.Destroy()
+    OpenSettings(5)
+}
+
+SettingsImportCode(g, code) {
+    n := ImportCode(code)
+    if !n {
+        MsgBox(Tx("That code didn't work. It should start with LL75-"), TITLE, "Icon! Owner" g.Hwnd)
+        return
+    }
+    MsgBox(Tx("Loaded {1} settings. Lobby Loop restarts now.", n), TITLE, "Iconi Owner" g.Hwnd)
+    g.Destroy()
+    Reload()
+}
+
 ProfileIndex(key) {
     for i, k in PROFILE_KEYS
         if (k = key)
@@ -927,7 +1083,7 @@ ProfileIndex(key) {
 }
 
 SaveSettingsGui(g, c) {
-    global botLastId, botFails
+    global botLastId, botFails, watchMinutes
     bad(msg) => MsgBox(msg, TITLE, "Icon! Owner" g.Hwnd)
     ; stop timer
     str := Trim(c["STOP"].Value)
@@ -976,6 +1132,11 @@ SaveSettingsGui(g, c) {
             return bad("'" v "' isn't a key name AutoHotkey knows (examples: w, Space, LShift, LCtrl).")
         }
     }
+    autoMin := Trim(c["AUTO_SCREENSHOT_MIN"].Value)
+    if (autoMin = "")
+        autoMin := 0
+    if !IsNumber(autoMin)
+        return bad("'Screenshot every' should be a number of minutes (0 = off).")
     channel := Trim(c["CHANNEL"].Value)
     if (channel != "" && !RegExMatch(channel, "^\d{15,22}$"))
         return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
@@ -990,7 +1151,8 @@ SaveSettingsGui(g, c) {
     SetSetting("STOP_ACTION", ACTIONS[c["ACTION"].Value][1])
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
-    for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS", "SCREENSHOT_EVERY_MATCH", "NOTIFY"]
+    for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS", "SCREENSHOT_EVERY_MATCH", "NOTIFY",
+                "SPECTATE_IDLE", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS"]
         SetSetting(key, c[key].Value)
     if (c["START_WITH_WINDOWS"].Value != (S["START_WITH_WINDOWS"] ? 1 : 0))
         SetStartWithWindows(c["START_WITH_WINDOWS"].Value)
@@ -1013,7 +1175,15 @@ SaveSettingsGui(g, c) {
     newLang := (c["LANG"].Value = 2) ? "ar" : "en"
     newTheme := (c["THEME"].Value = 2) ? "light" : "dark"
     newSize := ["small", "normal", "large"][c["SIZE"].Value]
+    newStyle := (c["STYLE"].Value = 2) ? "mini" : "card"
+    newAccent := ["yellow", "purple", "cyan", "pink", "green"][c["ACCENT"].Value]
     needReload := keysChanged || (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
+        || (newStyle != StrLower(S["OVERLAY_STYLE"])) || (newAccent != StrLower(S["ACCENT"]))
+    SetSetting("OVERLAY_STYLE", newStyle)
+    SetSetting("ACCENT", newAccent)
+    SetSetting("TREASURE_WORDS", Trim(c["TREASURE_WORDS"].Value))
+    SetSetting("AUTO_SCREENSHOT_MIN", Number(autoMin))
+    watchMinutes := Number(autoMin)
     SetSetting("LANG", newLang)
     SetSetting("THEME", newTheme)
     SetSetting("OVERLAY_SIZE", newSize)
@@ -1113,6 +1283,7 @@ ApplyStartSchedule() {
 ; Fires the daily scheduled start
 ScheduleWatch() {
     global startAtNext, goneSince
+    WatchTick()
     ; daily Discord summary
     sumT := Trim(String(S["DAILY_SUMMARY_TIME"]))
     if (sumT != "" && DiscordReady() && (ck := ParseClock(sumT))) {
@@ -1618,7 +1789,7 @@ UpdateUrl() {
     return (u != "") ? u : UPDATE_URL_DEFAULT
 }
 
-CheckUpdate(silent := true) {
+CheckUpdate(silent := true, autoYes := false) {
     url := UpdateUrl()
     if (url = "") {
         if !silent
@@ -1646,11 +1817,15 @@ CheckUpdate(silent := true) {
         Log("Up to date (v" VERSION ")")
         if !silent
             ShowTip("You have the latest version (v" VERSION ")", 3000)
+        if autoYes
+            Discord("**" PlayerName() "**: already on the latest version (v" VERSION ").")
         return
     }
-    if (MsgBox("Version " latest " is available (you have " VERSION ").`n`nUpdate now?", TITLE, "YesNo Iconi") != "Yes")
+    if (autoYes || MsgBox("Version " latest " is available (you have " VERSION ").`n`nUpdate now?", TITLE, "YesNo Iconi") = "Yes") {
+        DoUpdate(url, latest)
         return
-    DoUpdate(url, latest)
+    }
+    return
 }
 
 DoUpdate(url, latest) {
@@ -1717,6 +1892,60 @@ GuiOpts(extra := "") {
 LoadTranslations() {
     return Map(
         "Start / Stop", "تشغيل / إيقاف",
+        "Accent colour", "لون التمييز",
+        "Add Start menu and Desktop shortcuts", "إضافة اختصارات قائمة ابدأ وسطح المكتب",
+        "Add shortcuts", "إضافة اختصارات",
+        "Added {1} to the Start menu and your Desktop.", "تمت إضافة {1} إلى قائمة ابدأ وسطح المكتب.",
+        "Also delete your settings, stats and history?", "حذف الإعدادات والإحصائيات والسجل أيضًا؟",
+        "Buttons you taught with {1}. They're clicked whenever they show up.", "الأزرار التي علّمتها بـ {1}. يُضغط عليها كلما ظهرت.",
+        "Card", "بطاقة",
+        "Click reward buttons (Continue, Collect, Claim...)", "الضغط على أزرار المكافآت (Continue، Collect، Claim...)",
+        "Clicked '{1}'", "تم الضغط على '{1}'",
+        "Copied. Send it to a friend.", "تم النسخ. أرسله لصديق.",
+        "Copy my code", "نسخ رمزي",
+        "Cyan", "سماوي",
+        "Dim screen, mute, text reading, treasure watcher, reward clicks and live status are off until you restart it.", "تعتيم الشاشة والكتم وقراءة النص ومراقبة الكنوز والضغط على المكافآت والحالة المباشرة متوقفة حتى تعيد التشغيل.",
+        "Forget", "نسيان",
+        "Forget all", "نسيان الكل",
+        "Forgot popup button #{1}.", "تم نسيان زر النافذة المنبثقة #{1}.",
+        "Green", "أخضر",
+        "Live status message (shows when the PC went offline)", "رسالة حالة مباشرة (تُظهر متى انقطع الكمبيوتر)",
+        "Loaded {1} settings. Lobby Loop restarts now.", "تم تحميل {1} إعداد. سيُعاد تشغيل Lobby Loop الآن.",
+        "Lobby Loop didn't close properly last time.", "لم يُغلق Lobby Loop بشكل صحيح في المرة السابقة.",
+        "Mini", "مصغّر",
+        "No learned popup button under the mouse.", "لا يوجد زر نافذة منبثقة محفوظ تحت المؤشر.",
+        "No popup buttons learned yet.", "لا توجد أزرار نوافذ منبثقة محفوظة بعد.",
+        "Open a GitHub issue", "فتح بلاغ على GitHub",
+        "Pause 15 minutes", "إيقاف مؤقت 15 دقيقة",
+        "Paused for {1} minutes.", "متوقف مؤقتًا لمدة {1} دقيقة.",
+        "Pink", "وردي",
+        "Popups", "النوافذ المنبثقة",
+        "Post the control panel", "نشر لوحة التحكم",
+        "Purple", "بنفسجي",
+        "Remove {1} from this PC?", "إزالة {1} من هذا الكمبيوتر؟",
+        "Report a bug", "الإبلاغ عن خطأ",
+        "Safe mode", "الوضع الآمن",
+        "Screenshot to Discord every (minutes, 0 = off):", "لقطة شاشة إلى Discord كل (دقائق، 0 = معطل):",
+        "Send to my Discord", "إرسال إلى Discord الخاص بي",
+        "Settings code (your profile, timers, movement and look. No names or Discord links):", "رمز الإعدادات (ملفك ومؤقتاتك وحركتك ومظهرك. بدون أسماء أو روابط Discord):",
+        "Share & tools", "المشاركة والأدوات",
+        "Share your setup with friends, report bugs, install or remove.", "شارك إعدادك مع أصدقائك، أبلغ عن الأخطاء، ثبّت أو أزل.",
+        "Spectating teammates", "يشاهد زملاء الفريق",
+        "Status box style", "نمط صندوق الحالة",
+        "Stop moving while I'm spectating teammates", "إيقاف الحركة أثناء مشاهدة زملاء الفريق",
+        "That code didn't work. It should start with LL75-", "هذا الرمز لم يعمل. يجب أن يبدأ بـ LL75-",
+        "This removes the shortcuts, Start with Windows and the program file.", "سيؤدي هذا إلى إزالة الاختصارات والتشغيل مع Windows وملف البرنامج.",
+        "To teach one: hover over an empty part of the popup's button and press {1}. To forget the one under the mouse: Shift+{1}.", "لتعليم زر: ضع المؤشر على جزء فارغ من زر النافذة واضغط {1}. لنسيان الزر تحت المؤشر: Shift+{1}.",
+        "Tools", "الأدوات",
+        "Treasure words (separated by commas):", "كلمات الكنوز (مفصولة بفواصل):",
+        "Treasure!", "كنز!",
+        "Type !help in your channel to see all 30+ commands.", "اكتب !help في قناتك لرؤية أكثر من 30 أمرًا.",
+        "Uninstall", "إلغاء التثبيت",
+        "Use the pasted code", "استخدام الرمز الملصق",
+        "Watch for treasure (gizmos, pirate tokens...)", "مراقبة الكنوز (gizmos، رموز القراصنة...)",
+        "What happened? (what you did, what you expected, what went wrong)", "ماذا حدث؟ (ماذا فعلت، ماذا توقعت، ما الخطأ)",
+        "Yellow", "أصفر",
+        "Your log and version are added for you. Nothing personal is sent.", "يُضاف السجل والإصدار تلقائيًا. لا يُرسل أي شيء شخصي.",
         "Stop timer", "مؤقت الإيقاف",
         "30 minutes", "30 دقيقة",
         "1 hour", "ساعة",
@@ -1988,10 +2217,22 @@ BuildOverlay() {
     statusGui.SetFont("s" (fs + 4) " c777790", "Segoe UI")
     OV["dot"] := statusGui.Add("Text", "x" pad " y6 w" (fs * 2 + 4) " BackgroundTrans", "●")
     statusGui.SetFont("s" (fs + 1) " bold cECECF4")
+    if (StrLower(S["OVERLAY_STYLE"]) = "mini") {
+        OV["head"] := statusGui.Add("Text", "x+2 yp+5 w" (W - 70) " BackgroundTrans" al, TITLE)
+        statusTxt := OV["head"]
+        statusGui.MarginY := 6
+        statusGui.Show("x-4000 y-4000 NoActivate AutoSize")
+        WinSetTransparent(228, statusGui)
+        statusGui.GetPos(, , &w, &h)
+        WinSetRegion("0-0 w" w " h" h " R" h "-" h, statusGui)
+        PlaceOverlay()
+        Log("Status box (mini) ready")
+        return
+    }
     OV["head"] := statusGui.Add("Text", "x+2 yp+5 w" (inner - fs * 2 - 6) " BackgroundTrans" al, TITLE)
     statusGui.SetFont("s" fs " norm cD0D0E8")
     OV["now"] := statusGui.Add("Text", "x" pad " y+6 w" inner " BackgroundTrans" al, "")
-    OV["bar"] := statusGui.Add("Progress", "x" pad " y+8 w" inner " h5 cF7FE19 Background2A2A4E", 0)
+    OV["bar"] := statusGui.Add("Progress", "x" pad " y+8 w" inner " h5 c" AccentHex() " Background2A2A4E", 0)
     statusGui.SetFont("s" (fs - 1) " norm cA0A0C0")
     OV["timer"] := statusGui.Add("Text", "x" pad " y+6 w" inner " BackgroundTrans" al, "")
     OV["run"] := statusGui.Add("Text", "x" pad " y+4 w" inner " BackgroundTrans" al, "")
@@ -2485,6 +2726,7 @@ BotPoll() {
     if (botLastId = "") {                       ; first check: skip old messages
         botLastId := msgs.Length ? MaxId(msgs) : "0"
         Log("Phone control is listening")
+        PanelPoll()
         return
     }
     ; oldest first
@@ -2511,8 +2753,9 @@ BotPoll() {
         allowed := Trim(String(S["DISCORD_ALLOWED_IDS"]))
         if (allowed != "" && !InStr("," StrReplace(allowed, " ") ",", "," authorId ","))
             continue
-        HandleCommand(Trim(m.Has("content") ? m["content"] : ""))
+        HandleCommand(Trim(m.Has("content") ? m["content"] : ""), authorId)
     }
+    PanelPoll()
 }
 
 IdLess(a, b) {
@@ -2528,14 +2771,15 @@ MaxId(msgs) {
     return top
 }
 
-HandleCommand(text) {
+HandleCommand(text, authorId := "") {
+    global liveMsgId, watchMinutes, lastWatchShot
     if (SubStr(text, 1, 1) != "!")
         return
     parts := StrSplit(Trim(SubStr(text, 2)), " ", , 2)
     cmd := StrLower(parts[1])
     target := parts.Length >= 2 ? Trim(parts[2]) : ""
     arg := ""
-    if (cmd = "timer" || cmd = "profile") {         ; these take a value, not a PC name
+    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause") {   ; these take a value, not a PC name
         arg := target
         target := ""
     }
@@ -2545,33 +2789,14 @@ HandleCommand(text) {
     Log("Discord command: " text)
     switch cmd {
         case "help":
-            Discord(who "commands: ``!start`` ``!stop`` ``!status`` ``!ss`` (screenshot) ``!log`` ``!summary`` ``!lb`` (leaderboard) ``!dim`` ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight``. Add a name to target one PC, e.g. ``!stop zen``")
-        case "timer":
-            v := StrLower(Trim(arg))
-            if (v = "off" || v = "none" || v = "0") {
-                SaveStop(0, 0, "")
-            } else if (ck := ParseClock(v)) {
-                SaveStop(0, 0, Format("{:02}:{:02}", ck.h, ck.m))
-            } else if (dur := ParseDuration(v)) {
-                SaveStop(dur.h, dur.m, "")
-            } else {
-                Discord(who "I didn't understand '" arg "'. Try ``!timer 2h``, ``!timer 9:30pm`` or ``!timer off``.")
-                return
-            }
-            if running
-                ApplyStopLimits()
-            Discord(who "stop timer: " DescribeStop())
-        case "profile":
-            chosen := ""
-            for key in PROFILE_KEYS
-                if (arg != "" && InStr(key, StrLower(Trim(arg))) = 1)
-                    chosen := key
-            if (chosen = "") {
-                Discord(who "profiles: ``overnight`` ``quick`` ``chill`` ``custom``")
-                return
-            }
-            ApplyProfile(chosen)
-            Discord(who "profile " chosen ". Stop: " DescribeStop())
+            Discord(who "**commands**`n"
+                . "▶️ ``!start`` ``!stop`` ``!pause 15`` ``!resume`` ``!status`` ``!ping```n"
+                . "📸 ``!ss`` ``!watch 10`` / ``!watch off`` ``!live`` ``!panel`` ``!log```n"
+                . "⏰ ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight```n"
+                . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
+                . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
+                . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
+                . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
         case "status":
             Discord(who StatusText())
         case "start":
@@ -2602,6 +2827,86 @@ HandleCommand(text) {
         case "dim":
             ToggleBlackout()
             Discord(who "screen " (blackoutGui != "" ? "dimmed" : "back to normal"))
+        case "panel":
+            if !PanelCreate()
+                Discord(who "couldn't post the control panel. The bot needs Send Messages and Add Reactions.")
+        case "live":
+            SetSetting("LIVE_STATUS", 1)
+            liveMsgId := ""
+            if !LiveUpdate()
+                Discord(who "couldn't post the live status message.")
+        case "watch":
+            v := StrLower(Trim(arg))
+            watchMinutes := (v = "off" || v = "0" || v = "") ? 0 : (IsNumber(v) ? Max(1, Number(v)) : 0)
+            SetSetting("AUTO_SCREENSHOT_MIN", watchMinutes)
+            lastWatchShot := 0
+            Discord(who (watchMinutes ? "screenshot every " watchMinutes " min while running." : "auto screenshots off."))
+        case "pause":
+            mins := IsNumber(Trim(arg)) ? Max(1, Number(Trim(arg))) : 15
+            PauseFor(mins)
+            Discord(who "paused for " mins " min. ``!resume`` to start now.")
+        case "resume":
+            ResumeNow()
+            Discord(who (running ? "running ▶" : "couldn't start."))
+        case "mute":
+            Discord(who (SetGameMute(true) ? "Fortnite muted 🔇" : "Fortnite isn't open."))
+        case "unmute":
+            Discord(who (SetGameMute(false) ? "Fortnite unmuted 🔊" : "Fortnite isn't open."))
+        case "stats":
+            avg := AveragePlace()
+            Discord(who "📊 all time: **" totalMatches "** matches, **" Round(totalMinutes / 60, 1) " h**, **" FormatNumber(totalXP) "** XP"
+                . (bestPlace ? ", best #" bestPlace : "") (avg ? ", average #" avg : "") ", 🏴‍☠️ " treasureCount " treasures")
+        case "week":
+            wk := WeekStats()
+            Discord(who "📅 last 7 days: **" wk.matches "** matches, **" Floor(wk.minutes / 60) "h " Mod(Round(wk.minutes), 60) "m**"
+                . (wk.best ? ", best #" wk.best : "") (wk.xp ? ", " FormatNumber(wk.xp) " XP" : "") ", 🏴‍☠️ " wk.treasures)
+        case "last":
+            Discord(who LastMatchText())
+        case "treasures":
+            Discord(who "🏴‍☠️ " treasureCount " treasures all time" (lastTreasure != "" ? ". Last: **" lastTreasure "**" : ""))
+        case "uptime":
+            Discord(who "Lobby Loop open for " FormatDuration(A_TickCount - scriptStartTick) ", PC on for " FormatDuration(A_TickCount) ".")
+        case "ping":
+            Discord(who "pong 🏓 v" VERSION " · Fortnite " (WinExist(S["GAME_WINDOW"]) ? "open" : "closed") " · " (running ? StateLabel() : "stopped"))
+        case "version":
+            Discord(who "v" VERSION (A_IsCompiled ? " (exe)" : " (ahk)") ". Type ``!update`` to check for a new one.")
+        case "overlay":
+            ToggleOverlay()
+            Discord(who "status box " (overlayHidden ? "hidden" : "shown"))
+        case "popups":
+            Discord(who POPUPS.Length " learned popup buttons. Forget them in Settings > Popups (or Shift+" HK_TEACH " over one).")
+        case "update", "reload", "restartgame", "closegame", "sleep", "shutdown":
+            if (Trim(String(S["DISCORD_ALLOWED_IDS"])) = "") {
+                Discord(who "for safety, ``!" cmd "`` only works after you add your Discord user ID in Settings > Phone control.")
+                return
+            }
+            switch cmd {
+                case "update":
+                    Discord(who "checking for updates...")
+                    CheckUpdate(true, true)
+                case "reload":
+                    Discord(who "restarting Lobby Loop 🔄")
+                    Reload()
+                case "restartgame":
+                    try ProcessClose(GameExe())
+                    Discord(who "restarting Fortnite 🔄")
+                    SetTimer(() => Run(FN_URI), -5000)
+                case "closegame":
+                    if running
+                        ToggleRun("Discord closegame")
+                    try ProcessClose(GameExe())
+                    Discord(who "Fortnite closed.")
+                case "sleep", "shutdown":
+                    StartPowerAction(cmd)
+                    Discord(who (cmd = "sleep" ? "PC goes to sleep" : "PC shuts down") " in 30 s. ``!cancel`` to stop it.")
+            }
+        case "cancel":
+            if (pendingAction != "") {
+                ToggleRun()                                   ; cancels the countdown
+                Discord(who "cancelled ✋")
+            } else {
+                Discord(who "nothing to cancel.")
+            }
     }
 }
 
@@ -2709,7 +3014,8 @@ JsonValue(str, &pos) {
 ; ============================================================
 ; Stats dashboard (an HTML page built from your history)
 ; ============================================================
-OpenDashboard() {
+OpenDashboard(refreshOnly := false) {
+    global dashOpenTick
     days := Map()
     for r in ReadCsvRows(HISTORY_FILE) {
         if (r.Length < 5)
@@ -2737,17 +3043,42 @@ OpenDashboard() {
     html := StrReplace(html, "__PLAYER__", PlayerName())
     html := StrReplace(html, "__DAYS__", "[" dayJs "]")
     html := StrReplace(html, "__MATCHES__", "[" matchJs "]")
-    html := StrReplace(html, "__TOTALS__", '{"matches":' totalMatches ',"hours":' Round(totalMinutes / 60, 1) ',"xp":' totalXP ',"best":' bestPlace '}')
+    html := StrReplace(html, "__TOTALS__", '{"matches":' totalMatches ',"hours":' Round(totalMinutes / 60, 1) ',"xp":' totalXP ',"best":' bestPlace ',"treasures":' treasureCount '}')
+    ; live session (this run) - the page refreshes itself every 30 s while Lobby Loop is running
+    sess := ""
+    if (running && sessionStartTime != "") {
+        startDay := FormatTime(sessionStartTime, "yyyy-MM-dd"), startHm := FormatTime(sessionStartTime, "HH:mm")
+        for r in ReadCsvRows(MATCHES_FILE)
+            if (r.Length >= 4 && (r[1] > startDay || (r[1] = startDay && StrCompare(r[2], startHm) >= 0)))
+                sess .= (sess = "" ? "" : ",") '["' r[2] '",' (IsNumber(r[3]) ? r[3] : "null") ',' (IsNumber(r[4]) ? r[4] : "null") ']'
+    }
+    liveJs := '{"running":' (running ? "true" : "false") ',"time":"' (running ? FormatDuration(A_TickCount - sessionStart) : "") '","matches":' matches
+        . ',"state":"' JsonEscape(running ? StateLabel() : "stopped") '","updated":"' FormatTime(, "HH:mm:ss") '","list":[' sess ']}'
+    html := StrReplace(html, "__LIVE__", liveJs)
+    html := StrReplace(html, "__REFRESH__", running ? '<meta http-equiv="refresh" content="30">' : "")
     try FileDelete(DASH_FILE)
     FileAppend(html, DASH_FILE, "UTF-8")
-    try Run('"' DASH_FILE '"')
+    if !refreshOnly {
+        dashOpenTick := A_TickCount
+        SetTimer(DashboardRefresh, 30000)
+        try Run('"' DASH_FILE '"')
+    }
+}
+
+DashboardRefresh() {
+    if (A_TickCount - dashOpenTick > 4 * 3600000) {   ; stop refreshing after 4 hours
+        SetTimer(DashboardRefresh, 0)
+        return
+    }
+    if running
+        OpenDashboard(true)
 }
 
 DashboardHtml() {
     return '
     (
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Lobby Loop stats</title>
+<html><head><meta charset="utf-8">__REFRESH__<title>Lobby Loop stats</title>
 <style>
 body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#120b33;color:#eee}
 header{padding:24px 32px;background:linear-gradient(135deg,#2e1a80,#5b34d6)}
@@ -2763,6 +3094,7 @@ svg text{fill:#bbb;font-size:11px}
 .empty{opacity:.6;padding:20px 0}
 </style></head><body>
 <header><h1><span>&#x1F501;</span> Lobby Loop stats</h1><div class="sub">__PLAYER__</div></header>
+<div class="panel" id="live" style="display:none;margin-top:24px"><h2>&#x1F7E2; Live session</h2><div id="livebody"></div></div>
 <div class="cards" id="cards"></div>
 <div class="panel"><h2>Matches per day (last 14 days)</h2><div id="c1"></div></div>
 <div class="panel"><h2>Hours played per day (last 14 days)</h2><div id="c2"></div></div>
@@ -2771,10 +3103,20 @@ svg text{fill:#bbb;font-size:11px}
 var days = __DAYS__;
 var matches = __MATCHES__;
 var totals = __TOTALS__;
+var live = __LIVE__;
+if (live.running) {
+  document.getElementById("live").style.display = "block";
+  var lh = "<div class=cards style=padding:0>" + [["Running", live.time], ["Matches this run", live.matches], ["Now", live.state]].map(function(c){return "<div class=card><b>"+c[1]+"</b><i>"+c[0]+"</i></div>";}).join("") + "</div>";
+  if (live.list.length) {
+    lh += "<div style=margin-top:12px>" + live.list.map(function(m){return "<span style=display:inline-block;margin:4px;padding:6px;background:#2a2a4e;border-radius:8px>" + m[0] + (m[1]!==null ? " &middot; #" + m[1] : "") + (m[2]!==null ? " &middot; " + m[2].toLocaleString() + " XP" : "") + "</span>";}).join("") + "</div>";
+  }
+  lh += "<div style=opacity:.6;margin-top:8px>Updates every 30 seconds &middot; last update " + live.updated + "</div>";
+  document.getElementById("livebody").innerHTML = lh;
+}
 var places = matches.filter(function(m){return m[1]!==null;});
 var avg = places.length ? Math.round(places.reduce(function(a,m){return a+m[1];},0)/places.length) : null;
 var cards = [["Matches",totals.matches],["Hours",totals.hours],["Total XP",totals.xp.toLocaleString()],
-  ["Best placement",totals.best?"#"+totals.best:"-"],["Average placement",avg?"#"+avg:"-"]];
+  ["Best placement",totals.best?"#"+totals.best:"-"],["Average placement",avg?"#"+avg:"-"],["Treasures",totals.treasures]];
 document.getElementById("cards").innerHTML = cards.map(function(c){return "<div class=card><b>"+c[1]+"</b><i>"+c[0]+"</i></div>";}).join("");
 function at(n,v){return " "+n+"=\""+v+"\"";}
 function bars(el, rows, idx, color, unit){
@@ -2952,6 +3294,648 @@ WizardFinish() {
 }
 
 ; ============================================================
+; v7.5: Screen reader (spectating, treasure, reward buttons)
+; ============================================================
+; Every few seconds a screenshot is read by Windows' built-in text reader in the
+; background (it never pauses the game). The text decides:
+;   - "SPECTATING" / "NEXT TEAMMATE"  -> you're eliminated, stop moving
+;   - treasure words (TREASURE_WORDS)  -> count it, tell Discord
+;   - a button that just says CONTINUE / COLLECT / CLAIM ... -> click it
+ScreenReaderTick() {
+    global ocrPending, ocrStartTick, lastOcrTick
+    out := A_Temp "\ll_screen.txt"
+    if ocrPending {
+        if FileExist(out) {
+            ocrPending := false
+            txt := ""
+            try txt := FileRead(out, "UTF-8")
+            try FileDelete(out)
+            HandleScreenText(txt)
+        } else if (A_TickCount - ocrStartTick > 25000) {
+            ocrPending := false
+            Log("Screen reader timed out")
+        }
+        return
+    }
+    if (!running || !WinActive(S["GAME_WINDOW"]))
+        return
+    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"])
+        return
+    if (A_TickCount - lastOcrTick < Max(5, S["SCREEN_READER_SECONDS"]) * 1000)
+        return
+    lastOcrTick := A_TickCount
+    img := A_Temp "\ll_screen.png"
+    if !SaveRegionImage(img, 0, 0, A_ScreenWidth, A_ScreenHeight)
+        return
+    script := A_Temp "\ll_ocr_lines_v75.ps1"
+    if !FileExist(script)
+        FileAppend(OcrLinesScript(), script, "UTF-8")
+    try FileDelete(out)
+    try Run('powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' script '" "' img '" "' out '"', , "Hide")
+    ocrPending := true
+    ocrStartTick := A_TickCount
+}
+
+HandleScreenText(txt) {
+    global gameState, lastClaimTick, clicks
+    lines := []
+    for raw in StrSplit(txt, "`n", "`r") {
+        p := StrSplit(raw, "|", , 5)
+        if (p.Length < 5 || !IsNumber(p[1]))
+            continue
+        lines.Push({x: Integer(p[1]), y: Integer(p[2]), w: Integer(p[3]), h: Integer(p[4]), text: Trim(p[5])})
+    }
+    joined := ""
+    for ln in lines
+        joined .= " " StrUpper(ln.text)
+    spect := InStr(joined, "SPECTATING") || InStr(joined, "NEXT TEAMMATE") || InStr(joined, "PREVIOUS TEAMMATE")
+    if (spect && gameState != "spectating") {
+        gameState := "spectating"
+        Log("Spectating detected")
+    } else if (!spect && gameState = "spectating") {
+        gameState := "match"
+        Log("Back from spectating")
+    }
+    if S["WATCH_TREASURE"]
+        CheckTreasure(lines)
+    if (S["AUTO_CLAIM"] && gameState != "spectating" && A_TickCount - lastClaimTick > 10000) {
+        for ln in lines {
+            u := Trim(StrUpper(ln.text))
+            if (IsClaimWord(u) && ln.w > 20 && running && WinActive(S["GAME_WINDOW"])) {
+                lastClaimTick := A_TickCount
+                ReleaseAll()
+                MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+                Sleep(150)
+                Click()
+                clicks += 1
+                Log("Clicked reward button '" ln.text "' at " ln.x "," ln.y)
+                SetStatus(Tx("Clicked '{1}'", ln.text))
+                break
+            }
+        }
+    }
+}
+
+IsClaimWord(u) {
+    for w in ["CONTINUE", "COLLECT", "CLAIM", "CLAIM ALL", "CLAIM REWARD", "CLAIM REWARDS", "COLLECT ALL", "ACCEPT", "OKAY", "GOT IT"]
+        if (u = w)
+            return true
+    return false
+}
+
+CheckTreasure(lines) {
+    static seen := Map()
+    words := StrSplit(StrUpper(String(S["TREASURE_WORDS"])), ",", " `t")
+    for ln in lines {
+        u := StrUpper(ln.text)
+        if (InStr(u, "EQUIP") || InStr(u, "TREASURE HUNTERS"))
+            continue
+        for w in words {
+            if (w = "" || !InStr(u, w))
+                continue
+            if (seen.Has(u) && A_TickCount - seen[u] < 180000)
+                break
+            seen[u] := A_TickCount
+            TreasureFound(ln.text)
+            break
+        }
+    }
+}
+
+TreasureFound(text) {
+    global treasureCount, lastTreasure
+    treasureCount += 1
+    lastTreasure := text
+    IniWrite(treasureCount, STATS_FILE, "Stats", "TreasureCount")
+    if !FileExist(TREASURE_FILE)
+        try FileAppend("Date,Time,Treasure`r`n", TREASURE_FILE, "UTF-8")
+    try FileAppend(FormatTime(, "yyyy-MM-dd") "," FormatTime(, "HH:mm") "," StrReplace(text, ",", " ") "`r`n", TREASURE_FILE, "UTF-8")
+    Log("Treasure: " text)
+    SetStatus("🏴‍☠️ " text)
+    Notify("🏴‍☠️ " Tx("Treasure!"), text)
+    if DiscordReady() {
+        shot := A_Temp "\ll_treasure.png"
+        try FileCopy(A_Temp "\ll_screen.png", shot, 1)
+        if !(FileExist(shot) && DiscordFile("🏴‍☠️ Treasure: **" text "** (#" treasureCount " all time)", shot))
+            Discord("🏴‍☠️ Treasure: **" text "** (#" treasureCount " all time)")
+    }
+}
+
+OcrLinesScript() {
+    return '
+    (
+param($in, $out)
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
+$null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics, ContentType = WindowsRuntime]
+$null = [Windows.Globalization.Language, Windows.Globalization, ContentType = WindowsRuntime]
+$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -match "^IAsyncOperation.1$" })[0]
+function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
+$lang = New-Object Windows.Globalization.Language("en-US")
+if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) { $eng = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang) } else { $eng = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }
+$sb = New-Object System.Text.StringBuilder
+try {
+  $f = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($in)) ([Windows.Storage.StorageFile])
+  $s = Await ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+  $d = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])
+  $bmp = Await ($d.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+  $r = Await ($eng.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])
+  $s.Dispose()
+  foreach ($l in $r.Lines) {
+    $x1 = 99999; $y1 = 99999; $x2 = 0; $y2 = 0
+    foreach ($w in $l.Words) {
+      $b = $w.BoundingRect
+      if ($b.X -lt $x1) { $x1 = $b.X }
+      if ($b.Y -lt $y1) { $y1 = $b.Y }
+      if ($b.X + $b.Width -gt $x2) { $x2 = $b.X + $b.Width }
+      if ($b.Y + $b.Height -gt $y2) { $y2 = $b.Y + $b.Height }
+    }
+    [void]$sb.AppendLine(([string][int]$x1) + "|" + ([string][int]$y1) + "|" + ([string][int]($x2 - $x1)) + "|" + ([string][int]($y2 - $y1)) + "|" + $l.Text)
+  }
+} catch { }
+[IO.File]::WriteAllText($out + ".tmp", $sb.ToString())
+Move-Item -Force ($out + ".tmp") $out
+    )'
+}
+
+; ============================================================
+; v7.5: HTTP helper (webhook or bot), live status message
+; ============================================================
+; Returns {status, text}. auth = "" for webhooks, "bot" for the bot token.
+HttpJson(method, url, body := "", auth := "") {
+    res := {status: 0, text: ""}
+    try {
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        req.SetTimeouts(3000, 3000, 5000, 8000)
+        req.Open(method, url, false)
+        if (auth = "bot")
+            req.SetRequestHeader("Authorization", "Bot " Trim(String(S["DISCORD_BOT_TOKEN"])))
+        req.SetRequestHeader("User-Agent", "DiscordBot (https://github.com/yensobased1/lobby-loop, " VERSION ")")
+        if (body != "")
+            req.SetRequestHeader("Content-Type", "application/json")
+        req.Send(body)
+        res.status := req.Status
+        res.text := req.ResponseText
+    } catch as e {
+        Log("HTTP " method " failed: " e.Message)
+    }
+    return res
+}
+
+ApiBase() {
+    return "https://discord.com/api/v10/channels/" Trim(String(S["DISCORD_CHANNEL_ID"]))
+}
+
+; Posts a message and returns its id ("" if it failed). Uses the webhook, or the bot if there's no webhook.
+DiscordPostGetId(content) {
+    body := '{"username":"' JsonEscape(BotName()) '","avatar_url":"' ICON_URL '","content":"' JsonEscape(SubStr(content, 1, 1990)) '"}'
+    hook := DiscordUrl()
+    if (hook != "")
+        res := HttpJson("POST", hook (InStr(hook, "?") ? "&" : "?") "wait=true", body)
+    else if BotEnabled()
+        res := HttpJson("POST", ApiBase() "/messages", '{"content":"' JsonEscape(SubStr(content, 1, 1990)) '"}', "bot")
+    else
+        return ""
+    if (res.status >= 200 && res.status < 300) {
+        try return JsonParse(res.text)["id"]
+    }
+    return ""
+}
+
+DiscordEdit(msgId, content) {
+    hook := DiscordUrl()
+    body := '{"content":"' JsonEscape(SubStr(content, 1, 1990)) '"}'
+    if (hook != "")
+        res := HttpJson("PATCH", RegExReplace(hook, "\?.*$") "/messages/" msgId, body)
+    else if BotEnabled()
+        res := HttpJson("PATCH", ApiBase() "/messages/" msgId, body, "bot")
+    else
+        return false
+    return res.status >= 200 && res.status < 300
+}
+
+UnixNow() {
+    return DateDiff(A_NowUTC, "19700101000000", "Seconds")
+}
+
+; A message that updates itself every minute. Discord shows "Last update: 3 minutes ago",
+; so if that keeps growing, the PC is offline or Lobby Loop was closed.
+LiveTick() {
+    if (S["LIVE_STATUS"] && DiscordReady())
+        LiveUpdate()
+}
+
+LiveUpdate(closing := false) {
+    global liveMsgId
+    content := LiveText(closing)
+    if (liveMsgId != "" && DiscordEdit(liveMsgId, content))
+        return true
+    id := DiscordPostGetId(content)
+    if (id != "") {
+        liveMsgId := id
+        IniWrite(id, STATS_FILE, "Stats", "LiveMsgId")
+        return true
+    }
+    return false
+}
+
+LiveText(closing := false) {
+    if closing
+        head := "⚫ **" BotName() "** closed"
+    else if running
+        head := "🟢 **" BotName() "** running " FormatDuration(A_TickCount - sessionStart) " · " matches " matches this run · " StateLabel()
+    else
+        head := "⚪ **" BotName() "** stopped"
+    left := running ? TimeLeftMs() : ""
+    t := (left != "") ? "`n⏹ Stops in " FormatDuration(left) : ""
+    last := (lastPlace != "") ? "`n🏆 Last: #" lastPlace (lastXP != "" ? ", " FormatNumber(lastXP) " XP" : "") : ""
+    return "📡 **Live status**`n" head t last "`n📊 All time: " totalMatches " matches, " Round(totalMinutes / 60, 1) " h, 🏴‍☠️ " treasureCount " treasures"
+        . "`n🕒 Last update: <t:" UnixNow() ":R>  (if this gets old, the PC is offline or Lobby Loop is closed)"
+}
+
+StateLabel() {
+    labels := Map("lobby", "🏠 in the lobby", "end", "🏁 end screen", "spectating", "👻 spectating", "match", "🎮 in a match")
+    return labels.Has(gameState) ? labels[gameState] : "🎮 in a match"
+}
+
+; ============================================================
+; v7.5: Discord control panel (tap a reaction instead of typing)
+; ============================================================
+PanelCreate() {
+    global panelMsgId, panelSeen
+    if !BotEnabled()
+        return false
+    text := "🎛️ **Lobby Loop control panel** for **" PlayerName() "**`n"
+        . "▶️ start   ⏹️ stop   📸 screenshot   📊 status   🌙 dim screen`n"
+        . "Tap a reaction. To use the same one again, tap it off and on (or give the bot **Manage Messages** so it clears your tap)."
+    res := HttpJson("POST", ApiBase() "/messages", '{"content":"' JsonEscape(text) '"}', "bot")
+    if (res.status < 200 || res.status >= 300)
+        return false
+    try panelMsgId := JsonParse(res.text)["id"]
+    catch
+        return false
+    IniWrite(panelMsgId, STATS_FILE, "Stats", "PanelMsgId")
+    for e in PANEL_EMOJI {
+        HttpJson("PUT", ApiBase() "/messages/" panelMsgId "/reactions/" e[1] "/@me", "", "bot")
+        Sleep(450)
+    }
+    panelSeen := Map()
+    Log("Control panel posted")
+    return true
+}
+
+PanelPoll() {
+    global panelSeen, botUserId, panelMsgId
+    if (panelMsgId = "" || !BotEnabled())
+        return
+    if (botUserId = "") {
+        me := HttpJson("GET", "https://discord.com/api/v10/users/@me", "", "bot")
+        try botUserId := JsonParse(me.text)["id"]
+    }
+    for e in PANEL_EMOJI {
+        res := HttpJson("GET", ApiBase() "/messages/" panelMsgId "/reactions/" e[1] "?limit=100", "", "bot")
+        if (res.status = 404) {                      ; panel was deleted
+            panelMsgId := ""
+            IniWrite("", STATS_FILE, "Stats", "PanelMsgId")
+            return
+        }
+        if (res.status != 200)
+            continue
+        try users := JsonParse(res.text)
+        catch
+            continue
+        now := Map()
+        for u in users
+            if (u["id"] != botUserId)
+                now[u["id"]] := true
+        prev := panelSeen.Has(e[2]) ? panelSeen[e[2]] : Map()
+        for uid in now.Clone() {
+            if (prev.Has(uid) || !UserAllowed(uid))
+                continue
+            Log("Panel: " e[2] " by " uid)
+            HandleCommand("!" e[2])
+            del := HttpJson("DELETE", ApiBase() "/messages/" panelMsgId "/reactions/" e[1] "/" uid, "", "bot")
+            if (del.status = 204)
+                now.Delete(uid)                      ; cleared, so the next tap counts again
+        }
+        panelSeen[e[2]] := now
+    }
+}
+
+UserAllowed(uid) {
+    allowed := Trim(String(S["DISCORD_ALLOWED_IDS"]))
+    return allowed = "" || InStr("," StrReplace(allowed, " ") ",", "," uid ",")
+}
+
+; ============================================================
+; v7.5: pause / resume, auto screenshots, power commands
+; ============================================================
+PauseFor(mins) {
+    global resumeAtTick
+    if running
+        ToggleRun("pause")
+    resumeAtTick := A_TickCount + mins * 60000
+    SetTimer(ResumeCheck, 5000)
+    Log("Paused for " mins " min")
+}
+
+ResumeCheck() {
+    global resumeAtTick
+    if (!resumeAtTick || A_TickCount < resumeAtTick)
+        return
+    resumeAtTick := 0
+    SetTimer(ResumeCheck, 0)
+    ResumeNow()
+    Discord("▶ Resumed after the pause")
+}
+
+ResumeNow() {
+    global resumeAtTick
+    resumeAtTick := 0
+    SetTimer(ResumeCheck, 0)
+    if running
+        return
+    if WinExist(S["GAME_WINDOW"])
+        try WinActivate(S["GAME_WINDOW"])
+    ToggleRun()
+}
+
+WatchTick() {
+    global lastWatchShot
+    mins := watchMinutes
+    if (!running || mins <= 0 || !DiscordReady())
+        return
+    if (A_TickCount - lastWatchShot >= mins * 60000) {
+        lastWatchShot := A_TickCount
+        SendScreenshot("📸 Auto screenshot (every " mins " min) · " StateLabel())
+    }
+}
+
+StartPowerAction(act) {
+    global pendingAction, pendingLeft
+    if running
+        ToggleRun("Discord " act)
+    pendingAction := act
+    pendingLeft := 30
+    Log("Power action from Discord in 30 s: " act)
+    SetTimer(ActionTick, 1000)
+    ActionTick()
+}
+
+; ============================================================
+; v7.5: safe mode (after a crash) and error logging
+; ============================================================
+CheckSafeMode() {
+    global safeMode
+    clean := IniRead(STATS_FILE, "Stats", "CleanExit", 1)
+    IniWrite(0, STATS_FILE, "Stats", "CleanExit")
+    if (clean != 0)
+        return
+    safeMode := true
+    for key in ["BLACKOUT_ON_START", "MUTE_WHILE_RUNNING", "READ_RESULTS", "WATCH_TREASURE", "AUTO_CLAIM", "LIVE_STATUS"]
+        S[key] := 0                                   ; this session only, nothing is saved
+    Log("Safe mode: Lobby Loop didn't close properly last time")
+}
+
+OnExitHandler(reason, code) {
+    try {
+        if S["MUTE_WHILE_RUNNING"]
+            SetGameMute(false)
+        ToggleBlackout(false)
+        ReleaseAll()
+        if (S["LIVE_STATUS"] && DiscordReady() && liveMsgId != "")
+            LiveUpdate(true)
+        if !hadError
+            IniWrite(1, STATS_FILE, "Stats", "CleanExit")
+    }
+}
+
+OnErrorHandler(err, mode) {
+    global hadError
+    hadError := true
+    try Log("ERROR: " err.Message " (line " err.Line ", " err.What ")")
+    return 0                                           ; still show the normal error box
+}
+
+; ============================================================
+; v7.5: share settings with a code
+; ============================================================
+ExportCode() {
+    txt := ""
+    for key in SHARE_KEYS
+        txt .= key "=" S[key] ";"
+    code := "LL75-" Base64Encode(txt)
+    A_Clipboard := code
+    Log("Settings code copied (" StrLen(code) " characters)")
+    return code
+}
+
+ImportCode(code) {
+    code := Trim(code)
+    if (SubStr(code, 1, 5) != "LL75-")
+        return 0
+    txt := Base64Decode(SubStr(code, 6))
+    if (txt = "")
+        return 0
+    n := 0
+    for pair in StrSplit(txt, ";") {
+        kv := StrSplit(pair, "=", , 2)
+        if (kv.Length != 2)
+            continue
+        for key in SHARE_KEYS
+            if (key = kv[1]) {
+                SetSetting(key, IsNumber(kv[2]) ? Number(kv[2]) : kv[2])
+                n += 1
+            }
+    }
+    Log("Imported " n " settings from a code")
+    return n
+}
+
+Base64Encode(str) {
+    size := StrPut(str, "UTF-8") - 1
+    buf := Buffer(size + 1, 0)
+    StrPut(str, buf, "UTF-8")
+    chars := 0
+    DllCall("Crypt32\CryptBinaryToStringW", "Ptr", buf, "UInt", size, "UInt", 0x40000001, "Ptr", 0, "UInt*", &chars)
+    out := Buffer(chars * 2, 0)
+    DllCall("Crypt32\CryptBinaryToStringW", "Ptr", buf, "UInt", size, "UInt", 0x40000001, "Ptr", out, "UInt*", &chars)
+    return StrGet(out, "UTF-16")
+}
+
+Base64Decode(b64) {
+    bytes := 0
+    if !DllCall("Crypt32\CryptStringToBinaryW", "Str", b64, "UInt", 0, "UInt", 1, "Ptr", 0, "UInt*", &bytes, "Ptr", 0, "Ptr", 0)
+        return ""
+    buf := Buffer(bytes + 2, 0)
+    if !DllCall("Crypt32\CryptStringToBinaryW", "Str", b64, "UInt", 0, "UInt", 1, "Ptr", buf, "UInt*", &bytes, "Ptr", 0, "Ptr", 0)
+        return ""
+    return StrGet(buf, bytes, "UTF-8")
+}
+
+; ============================================================
+; v7.5: report a bug
+; ============================================================
+ReportBug() {
+    g := ThemeGui(TITLE " - " Tx("Report a bug"))
+    UiText(g, "w520", "🐞 " Tx("Report a bug"), "title")
+    UiText(g, "w520 y+6", Tx("What happened? (what you did, what you expected, what went wrong)"))
+    desc := UiEdit(g, "w520 r6 y+6")
+    UiText(g, "w520 y+8", Tx("Your log and version are added for you. Nothing personal is sent."), "muted")
+    gh := UiButton(g, "xm y+14 w250 Default", "🐙 " Tx("Open a GitHub issue"))
+    gh.OnEvent("Click", (*) => (BugToGitHub(desc.Value), g.Destroy()))
+    dc := UiButton(g, "x+10 yp w250", "💬 " Tx("Send to my Discord"))
+    dc.OnEvent("Click", (*) => (BugToDiscord(desc.Value), g.Destroy()))
+    g.OnEvent("Escape", (*) => g.Destroy())
+    g.Show()
+}
+
+BugInfo() {
+    tail := ""
+    try {
+        logLines := StrSplit(FileRead(LOG_FILE), "`n", "`r")
+        start := Max(1, logLines.Length - 40)
+        loop logLines.Length - start + 1
+            tail .= logLines[start + A_Index - 1] "`n"
+    }
+    return "Version: " VERSION (A_IsCompiled ? " (exe)" : " (ahk)") "`nScreen: " A_ScreenWidth "x" A_ScreenHeight "`nWindows: " A_OSVersion "`nLanguage: " S["LANG"] "`n`nLast log lines:`n``````" "`n" tail "``````"
+}
+
+BugToGitHub(desc) {
+    body := "**What happened:**`n" (Trim(desc) != "" ? desc : "(no description)") "`n`n" BugInfo()
+    body := SubStr(body, 1, 6000)
+    title := "Bug: " SubStr(StrReplace(Trim(desc), "`n", " "), 1, 70)
+    Run("https://github.com/yensobased1/lobby-loop/issues/new?title=" UriEncode(title) "&body=" UriEncode(body))
+    Log("Bug report opened on GitHub")
+}
+
+BugToDiscord(desc) {
+    if !DiscordReady() {
+        ShowTip(Tx("Discord isn't set up. Press {1} and paste your webhook link.", HK_SETTINGS), 4000)
+        return
+    }
+    copyPath := A_Temp "\" BASE "_log.txt"
+    try FileCopy(LOG_FILE, copyPath, 1)
+    ok := DiscordFile("🐞 **Bug report** from " PlayerName() " (v" VERSION ")`n" SubStr(desc, 1, 1500), copyPath)
+    ShowTip(ok ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500)
+}
+
+UriEncode(str) {
+    out := ""
+    size := StrPut(str, "UTF-8")
+    buf := Buffer(size, 0)
+    StrPut(str, buf, "UTF-8")
+    loop size - 1 {
+        b := NumGet(buf, A_Index - 1, "UChar")
+        if ((b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A) || b = 0x2D || b = 0x2E || b = 0x5F || b = 0x7E)
+            out .= Chr(b)
+        else
+            out .= Format("%{:02X}", b)
+    }
+    return out
+}
+
+; ============================================================
+; v7.5: install shortcuts / uninstall
+; ============================================================
+InstallShortcuts() {
+    target := A_IsCompiled ? A_ScriptFullPath : A_AhkPath
+    args := A_IsCompiled ? "" : '"' A_ScriptFullPath '"'
+    ico := A_IsCompiled ? A_ScriptFullPath : (FileExist(A_ScriptDir "\lobby_loop.ico") ? A_ScriptDir "\lobby_loop.ico" : "")
+    ok := 0
+    for path in [A_Programs "\" TITLE ".lnk", A_Desktop "\" TITLE ".lnk"] {
+        try {
+            FileCreateShortcut(target, path, A_ScriptDir, args, TITLE, ico)
+            ok += 1
+        }
+    }
+    Log("Installed " ok " shortcuts")
+    ShowTip(Tx("Added {1} to the Start menu and your Desktop.", TITLE), 3500)
+}
+
+Uninstall() {
+    if (MsgBox(Tx("Remove {1} from this PC?", TITLE) "`n`n" Tx("This removes the shortcuts, Start with Windows and the program file."), TITLE, "YesNo Icon!") != "Yes")
+        return
+    if running
+        ToggleRun("uninstall")
+    SetStartWithWindows(false)
+    try FileDelete(A_Programs "\" TITLE ".lnk")
+    try FileDelete(A_Desktop "\" TITLE ".lnk")
+    if (MsgBox(Tx("Also delete your settings, stats and history?"), TITLE, "YesNo Icon?") = "Yes") {
+        for f in [INI_FILE, STATS_FILE, POPUP_FILE, HISTORY_FILE, MATCHES_FILE, TREASURE_FILE, DASH_FILE, LOG_FILE]
+            try FileDelete(f)
+    }
+    Log("Uninstalled")
+    Run(A_ComSpec ' /c ping 127.0.0.1 -n 3 > nul & del /f /q "' A_ScriptFullPath '"', , "Hide")
+    ExitApp()
+}
+
+; ============================================================
+; v7.5: popups (forget one, or the one under the mouse)
+; ============================================================
+ForgetPopup(index) {
+    global POPUPS
+    if (index < 1 || index > POPUPS.Length)
+        return
+    POPUPS.RemoveAt(index)
+    SavePopups()
+    Log("Forgot popup #" index)
+}
+
+ForgetPopupUnderMouse() {
+    MouseGetPos(&mx, &my)
+    for i, p in POPUPS {
+        if (mx >= p.l * A_ScreenWidth && mx <= p.r * A_ScreenWidth && my >= p.t * A_ScreenHeight && my <= p.b * A_ScreenHeight) {
+            ForgetPopup(i)
+            ShowTip(Tx("Forgot popup button #{1}.", i), 2500)
+            return
+        }
+    }
+    ShowTip(Tx("No learned popup button under the mouse."), 2500)
+}
+
+; ============================================================
+; v7.5: stats for phone commands
+; ============================================================
+WeekStats() {
+    st := {matches: 0, minutes: 0, xp: 0, best: 0, treasures: 0}
+    from := FormatTime(DateAdd(A_Now, -6, "Days"), "yyyy-MM-dd")
+    for r in ReadCsvRows(MATCHES_FILE) {
+        if (r.Length < 4 || StrCompare(r[1], from) < 0)
+            continue
+        st.matches += 1
+        if IsNumber(r[4])
+            st.xp += r[4]
+        if (IsNumber(r[3]) && r[3] > 0 && (st.best = 0 || r[3] < st.best))
+            st.best := Integer(r[3])
+    }
+    for r in ReadCsvRows(HISTORY_FILE)
+        if (r.Length >= 4 && StrCompare(r[1], from) >= 0 && IsNumber(r[4]))
+            st.minutes += r[4]
+    for r in ReadCsvRows(TREASURE_FILE)
+        if (r.Length >= 1 && StrCompare(r[1], from) >= 0)
+            st.treasures += 1
+    return st
+}
+
+LastMatchText() {
+    rows := ReadCsvRows(MATCHES_FILE)
+    if !rows.Length
+        return "no matches recorded yet."
+    r := rows[rows.Length]
+    return "last match " r[1] " " r[2] (IsNumber(r[3]) ? ", placed #" r[3] : "") (r.Length >= 4 && IsNumber(r[4]) ? ", " FormatNumber(r[4]) " XP" : "")
+}
+
+AveragePlace() {
+    sum := 0, n := 0
+    for r in ReadCsvRows(MATCHES_FILE)
+        if (r.Length >= 3 && IsNumber(r[3]) && r[3] > 0)
+            sum += r[3], n += 1
+    return n ? Round(sum / n) : 0
+}
+
+; ============================================================
 ; Helpers
 ; ============================================================
 WriteSettingsFile() {
@@ -2995,7 +3979,19 @@ RefreshOverlay() {
         OV["dot"].SetFont("c" (state = "on" ? "3DDC84" : state = "paused" ? "FFB300" : "777790"))
         lastState := state
     }
-    SetIfChanged(OV["head"], TITLE "   " (running ? Tx("ON") "  " FormatDuration(A_TickCount - sessionStart) : Tx("OFF")))
+    icons := Map("lobby", "🏠", "end", "🏁", "spectating", "👻", "match", "🎮")
+    stateIcon := (running && icons.Has(gameState)) ? "  " icons[gameState] : ""
+    if !OV.Has("now") {                              ; mini style: one line
+        left := running ? TimeLeftMs() : ""
+        mini := (running ? Tx("ON") " " FormatDuration(A_TickCount - sessionStart) : Tx("OFF")) stateIcon "   🎮 " matches
+        if (left != "")
+            mini .= "   ⏹ " FormatDuration(left)
+        if treasureCount
+            mini .= "   🏴‍☠️ " treasureCount
+        SetIfChanged(OV["head"], mini)
+        return
+    }
+    SetIfChanged(OV["head"], TITLE "   " (running ? Tx("ON") "  " FormatDuration(A_TickCount - sessionStart) : Tx("OFF")) stateIcon)
     SetIfChanged(OV["now"], running ? lastMsg : Tx("{1} = start,  {2} = settings", HK_TOGGLE, HK_SETTINGS))
     ; stop timer + progress bar
     left := running ? TimeLeftMs() : ""
@@ -3021,6 +4017,8 @@ RefreshOverlay() {
         runTxt .= "     🏆 #" lastPlace
     if (lastXP != "")
         runTxt .= "     ⭐ " FormatNumber(lastXP) " XP"
+    if treasureCount
+        runTxt .= "     🏴‍☠️ " treasureCount
     SetIfChanged(OV["run"], runTxt)
     mins := totalMinutes + (running ? (A_TickCount - sessionStart) / 60000 : 0)
     SetIfChanged(OV["total"], "📊 " Tx("All time: {1} matches, {2}h {3}m", totalMatches, Floor(mins / 60), Mod(Floor(mins), 60)))
@@ -3187,7 +4185,7 @@ Measure(cap, fx, fy, c, tol) {
 }
 
 TryClick(regionName) {
-    global clicks
+    global clicks, gameState
     if (A_TickCount - lastClick[regionName] < S["CLICK_COOLDOWN"])
         return false
     if !FindButton(regionName)
@@ -3198,6 +4196,7 @@ TryClick(regionName) {
     b := FindButton(regionName)
     if !b
         return false
+    gameState := regionName                         ; "lobby" or "end"
     ReleaseAll()
     lastClick[regionName] := A_TickCount
     MouseMove(b.x + Random(-b.w // 6, b.w // 6), b.y + Random(-b.h // 6, b.h // 6), 6)
@@ -3270,7 +4269,7 @@ DoSwap() {
 ; Main loop
 ; ============================================================
 MainLoop() {
-    global matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil
+    global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil
     if !running
         return
 
@@ -3362,6 +4361,15 @@ MainLoop() {
         SetStatus(Tx("Ready / Play clicked, waiting for match"))
         return
     }
+
+    ; eliminated: stop moving while spectating teammates
+    if (gameState = "spectating" && S["SPECTATE_IDLE"]) {
+        SetStatus("👻 " Tx("Spectating teammates"))
+        SleepActive(1000)
+        return
+    }
+    if (gameState != "spectating")
+        gameState := "match"
 
     ; 2) Move around like a person
     SetStatus(Tx("Walking"))
