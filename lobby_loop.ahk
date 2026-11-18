@@ -34,6 +34,8 @@ CHANGELOG := [
     "  + Checks Fortnite is on Windowed Fullscreen",
     "  + FPS saver: Fortnite runs at 30 FPS while Lobby Loop runs, yours comes back after",
     "  + Laptop battery guard (optional): stop or sleep when the battery is low",
+    "  + Weekly prize checklist (names from fnchesttracker.com): ticks itself off when",
+    "    you find one, and Discord says how many of this week's prizes you have (!prizes)",
     "  + Settings: treasure split into Treasure and Alerts & clips",
     "",
     "v7.6  (18 Nov 2026)",
@@ -1715,6 +1717,10 @@ LoadTranslations() {
         "Check Fortnite's servers first (wait during outages)", "افحص خوادم Fortnite أولًا (انتظر أثناء الأعطال)",
         "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "اضغط على نوافذ Fortnite المعروفة تلقائيًا (انقطع الاتصال، الخادم لا يستجيب، تمت الإزالة...)",
         "Clips", "المقاطع",
+        "Week {1} prizes", "جوائز الأسبوع {1}",
+        "This week's prizes", "جوائز هذا الأسبوع",
+        "Open Chest Tracker (fnchesttracker.com)", "فتح Chest Tracker ‏(fnchesttracker.com)",
+        "Comes with the online treasure words.", "تأتي مع كلمات الكنوز من الإنترنت.",
         "Closed a Fortnite popup ({1})", "تم إغلاق نافذة Fortnite ({1})",
         "Couldn't download the treasure words. Check your internet.", "تعذر تنزيل كلمات الكنوز. تحقق من الإنترنت.",
         "Couldn't read Fortnite's settings file", "تعذرت قراءة ملف إعدادات Fortnite",
@@ -2735,7 +2741,7 @@ HandleCommand(text, authorId := "") {
                 . "⏰ ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight```n"
                 . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
                 . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
-                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!servers```n"
+                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!servers`` ``!prizes```n"
                 . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
@@ -2876,6 +2882,9 @@ HandleCommand(text, authorId := "") {
                 if (StrLen(all) < 1500 && StrLen(ln.text) >= 3)
                     all .= ln.text " · "
             Discord(who "🔎 on screen: " (all != "" ? all : "no text found"))
+        case "prizes":
+            wk := PrizeWeek()
+            Discord(who (wk ? "🎁 **Week " wk " prizes**`n" StrReplace(PrizesText(wk), "⬜", "▫️") : "no prize list yet (it comes with the online treasure words)."))
         case "servers":
             why := ServersDown()
             Discord(who (why != "" ? "🛑 Fortnite servers look down: **" why "**" : "✅ Fortnite servers look fine") " (status.epicgames.com)")
@@ -4514,7 +4523,11 @@ TreasureFound(text, cat := "") {
         SetTimer(() => (SoundBeep(1200, 90), SoundBeep(1600, 140)), -10)
     if S["TREASURE_NOTIFY"]
         Notify("🏴‍☠️ " catName, text)
+    prize := MarkPrize(text)
+    if IsObject(prize)
+        catName := prize.type
     msg := "🏴‍☠️ **" catName "**: " text " (#" treasureCount " all time)"
+        . (IsObject(prize) ? "`n🎁 Week " prize.week " prize: **" prize.name "** (" prize.got "/" prize.total " this week)" : "")
     if (DiscordReady() && S["TREASURE_DISCORD"]) {
         shot := A_Temp "\ll_treasure.png"
         sent := false
@@ -4972,8 +4985,10 @@ OpenSettings(startPage := 1) {
     uw := add(UiButton(g, "xs+" COL2 " y+14 w300", "🌐 " Tx("Update the words now")))
     uw.OnEvent("Click", (*) => SettingsUpdateWords(g))
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Online words: {1}", S["TREASURE_ONLINE_VERSION"] != "" ? S["TREASURE_ONLINE_VERSION"] : Tx("not downloaded yet")), "muted"))
-    add(UiText(g, "xs+" COL2 " y+14 w300", Tx("Recent finds"), "head"))
-    add(UiText(g, "xs+" COL2 " y+2 w300 r4", RecentTreasureText(4), "muted"))
+    add(UiText(g, "xs+" COL2 " y+14 w300", PrizeWeek() ? Tx("Week {1} prizes", PrizeWeek()) : Tx("This week's prizes"), "head"))
+    add(UiText(g, "xs+" COL2 " y+2 w300 r6", PrizesText(PrizeWeek()), "muted"))
+    ws := add(UiButton(g, "xs+" COL2 " y+4 w300", "🌐 " Tx("Open Chest Tracker (fnchesttracker.com)")))
+    ws.OnEvent("Click", (*) => Run("https://fnchesttracker.com/tracker"))
 
     ; ---- 7. Alerts & clips ----
     newPage(StrReplace(Tx("Alerts & clips"), "&", "&&"), Tx("What happens when treasure is found."))
@@ -5002,6 +5017,8 @@ OpenSettings(startPage := 1) {
     tc.OnEvent("Click", (*) => SettingsTestClip(g, c))
     pf := add(UiButton(g, "x" CX " y+8 w250", "📁 " Tx("Open proof screenshots")))
     pf.OnEvent("Click", (*) => (DirCreate(A_ScriptDir "\" BASE "_treasure_proof"), Run(A_ScriptDir "\" BASE "_treasure_proof")))
+    add(UiText(g, "x" CX " y+18 w" CW, Tx("Recent finds"), "head"))
+    add(UiText(g, "x" CX " y+2 w" CW " r3", RecentTreasureText(3), "muted"))
 
     ; ---- 7. Hotkeys ----
     newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
@@ -5398,6 +5415,13 @@ UpdateTreasureWords(manual := false) {
             changed += 1
         }
     SetSetting("TREASURE_ONLINE_VERSION", vals["version"])
+    if vals.Has("week") {
+        try IniDelete(STATS_FILE, "WeeklyPrizes")
+        IniWrite(vals["week"], STATS_FILE, "WeeklyPrizes", "Week")
+        for k, v in vals
+            if RegExMatch(k, "^prizes_(\d+)$", &pm)
+                IniWrite(v, STATS_FILE, "WeeklyPrizes", "W" pm[1])
+    }
     Log("Treasure words updated to " vals["version"] " (" changed " lists changed)")
     if (changed || manual)
         ShowTip(Tx("Treasure words updated ({1}).", vals["version"]), 3500)
@@ -5699,4 +5723,62 @@ SettingsUpdateWords(g) {
     OpenSettings(6)
     if !ok
         ShowTip(Tx("Couldn't download the treasure words. Check your internet."), 3500)
+}
+
+; ============================================================
+; v7.7: weekly prize checklist (names from treasure_words.txt, taken from fnchesttracker.com)
+;   prizes_3=Solid Gold Miku|Outfit;Miku's Takarabako|Back bling;...
+; ============================================================
+PrizeWeek() {
+    v := IniRead(STATS_FILE, "WeeklyPrizes", "Week", 0)
+    return IsNumber(v) ? Integer(v) : 0
+}
+
+PrizeList(week) {
+    out := []
+    for item in StrSplit(IniRead(STATS_FILE, "WeeklyPrizes", "W" week, ""), ";", " `t") {
+        p := StrSplit(item, "|", " `t")
+        if (p.Length && p[1] != "")
+            out.Push({name: p[1], type: p.Length >= 2 ? p[2] : "Prize"})
+    }
+    return out
+}
+
+PrizeKey(text) => RegExReplace(StrUpper(text), "[^A-Z0-9]")   ; ignores spaces, ' and - so OCR slips still match
+
+PrizesText(week) {
+    if !week
+        return Tx("Comes with the online treasure words.")
+    out := ""
+    for p in PrizeList(week)
+        out .= (out = "" ? "" : "`n") (IniRead(STATS_FILE, "PrizesFound", PrizeKey(p.name), "") != "" ? "✅ " : "⬜ ") p.name "  (" p.type ")"
+    return out != "" ? out : Tx("Comes with the online treasure words.")
+}
+
+; If the found text names a weekly prize, tick it off. Returns {name, type, week, got, total} or "".
+MarkPrize(text) {
+    key := PrizeKey(text)
+    hit := ""
+    loop PrizeWeek() {
+        wk := PrizeWeek() - A_Index + 1                 ; this week first
+        for p in PrizeList(wk)
+            if (StrLen(PrizeKey(p.name)) >= 4 && InStr(key, PrizeKey(p.name))) {
+                hit := {name: p.name, type: p.type, week: wk}
+                break
+            }
+        if IsObject(hit)
+            break
+    }
+    if !IsObject(hit)
+        return ""
+    IniWrite(FormatTime(, "yyyy-MM-dd HH:mm"), STATS_FILE, "PrizesFound", PrizeKey(hit.name))
+    got := 0, total := 0
+    for p in PrizeList(hit.week) {
+        total += 1
+        if (IniRead(STATS_FILE, "PrizesFound", PrizeKey(p.name), "") != "")
+            got += 1
+    }
+    hit.got := got, hit.total := total
+    Log("Weekly prize found: " hit.name " (week " hit.week ", " got "/" total ")")
+    return hit
 }
