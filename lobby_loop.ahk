@@ -34,6 +34,7 @@ CHANGELOG := [
     "    a clip of the 20 seconds before + 5 seconds after",
     "  + Doesn't click Play Again while your teammates are still playing, so you keep",
     "    the treasure they find",
+    "  + Settings > Look: show or hide the status box (F10 does the same, and it's remembered)",
     "  + Fortnite Sleep Mode: clicks Keep Playing by itself, and gives the camera a tiny",
     "    nudge every 4 minutes while it's standing still so Fortnite doesn't fall asleep",
     "  + Clips go to Discord by themselves when they're under 10 MB",
@@ -525,8 +526,11 @@ A_TrayMenu.Default := trayStart
 
 ; ---------- Status box ----------
 statusTxt := ""
-if S["SHOW_OVERLAY"]
-    BuildOverlay()
+BuildOverlay()                     ; always built, so the setting / F10 can show it again later
+if !S["SHOW_OVERLAY"] {
+    overlayHidden := true
+    statusGui.Hide()
+}
 SetTimer(RefreshOverlay, 400)
 
 ApplyStartSchedule()
@@ -1652,6 +1656,7 @@ LoadTranslations() {
     return Map(
         "Wake Fortnite from Sleep Mode (clicks Keep Playing)", "إيقاظ Fortnite من وضع السكون (يضغط Keep Playing)",
         "Best: in Fortnite go to Settings > Game > Energy Saving and set Sleep Mode to Never.", "الأفضل: في Fortnite اذهب إلى الإعدادات > اللعبة > توفير الطاقة واضبط وضع السكون على Never.",
+        "Show the status box", "إظهار مربع الحالة",
         "Woke Fortnite from Sleep Mode", "تم إيقاظ Fortnite من وضع السكون",
         "Fortnite Sleep Mode: set it to Never (Settings > Game > Energy Saving)", "وضع السكون في Fortnite: اضبطه على Never (الإعدادات > اللعبة > توفير الطاقة)",
         "Pirate Shop Access", "وصول متجر القراصنة",
@@ -2145,15 +2150,16 @@ QuickTimer(h, m, *) {
     ShowTip(Tx("Stop: {1}", DescribeStop()), 2500)
 }
 
-ToggleOverlay() {
+ToggleOverlay(want := -1) {
     global overlayHidden
     if (statusTxt = "")
         return
-    overlayHidden := !overlayHidden
+    overlayHidden := (want = -1) ? !overlayHidden : !want
     if overlayHidden
         statusGui.Hide()
     else
         statusGui.Show("NoActivate")
+    SetSetting("SHOW_OVERLAY", overlayHidden ? 0 : 1)      ; remembered next time
 }
 
 ; ============================================================
@@ -4956,7 +4962,8 @@ OpenSettings(startPage := 1) {
         if (k = StrLower(S["OVERLAY_SIZE"]))
             si := i
     c["SIZE"].Choose(si)
-    mv := add(UiButton(g, "xs y+18 w260", "✋ " Tx("Move status box")))
+    c["SHOW_OVERLAY"] := addAll(UiCheck(g, "xs y+18", Tx("Show the status box") "  (" HK_OVERLAY ")", !overlayHidden, 260))
+    mv := add(UiButton(g, "xs+" COL2 " yp-4 w260", "✋ " Tx("Move status box")))
     mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
 
     ; ---- 12. Share & tools ----
@@ -5144,6 +5151,8 @@ SaveSettingsGui(g, c) {
     SetSetting("THEME", newTheme)
     SetSetting("OVERLAY_SIZE", newSize)
     SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right", "custom"][c["CORNER"].Value])
+    if (c["SHOW_OVERLAY"].Value = (overlayHidden ? 1 : 0))
+        ToggleOverlay(c["SHOW_OVERLAY"].Value)
     g.Destroy()
     botLastId := "", botFails := 0
     if running {
