@@ -34,6 +34,8 @@ CHANGELOG := [
     "    a clip of the 20 seconds before + 5 seconds after",
     "  + Doesn't click Play Again while your teammates are still playing, so you keep",
     "    the treasure they find",
+    "  + Fortnite Sleep Mode: clicks Keep Playing by itself, and gives the camera a tiny",
+    "    nudge every 4 minutes while it's standing still so Fortnite doesn't fall asleep",
     "  + Clips go to Discord by themselves when they're under 10 MB",
     "  + Read the screen now: shows what Lobby Loop sees, to tune the words",
     "  + Extras: keep the PC awake, stop after X matches, Fortnite volume,",
@@ -235,6 +237,7 @@ DEFAULTS := [
     ["STREAM_HIDE", 0, "1 = hide the status box from OBS, streams and screenshots"],
     ["AUTO_CLAIM", 1, "1 = click buttons that just say Continue, Collect, Claim, Accept..."],
     ["SPECTATE_IDLE", 1, "1 = stop moving while you're spectating teammates"],
+    ["WAKE_FROM_SLEEP", 1, "1 = click Keep Playing when Fortnite goes into Sleep Mode, and keep it from falling asleep while waiting"],
     ["WAIT_FOR_SQUAD", 1, "1 = don't click Play Again while you're spectating, so you keep treasure your teammates find"],
     ["SCREEN_READER_SECONDS", 10, "How often the screen reader looks at the screen, in seconds"],
     ["AUTO_SCREENSHOT_MIN", 0, "Send a screenshot to Discord every this many minutes (0 = off)"],
@@ -410,6 +413,8 @@ lobbyVisit := false    ; true while the lobby button is on screen
 modeChecked := false
 modeRecheckTick := 0
 modeWarned := false
+lastNudgeTick := 0     ; last tiny camera move that keeps Fortnite out of Sleep Mode
+sleepWakes := 0        ; times we clicked Keep Playing this run
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
@@ -418,7 +423,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "SLIDE_CHANCE", "CROUCH_CHANCE", "STRAFE_CHANCE", "SWAP_CHANCE", "LOOK_CHANCE", "IDLE_CHANCE", "IDLE_MIN",
                "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
-               "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
+               "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
                "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
 CheckSafeMode()
@@ -605,7 +610,7 @@ ValidKey(keyName) {
 }
 
 ToggleRun(reason := "you") {
-    global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned
+    global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned, lastNudgeTick, sleepWakes
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
     global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries
     autoStartArmed := false
@@ -645,6 +650,7 @@ ToggleRun(reason := "you") {
         if S["KEEP_AWAKE"]
             KeepAwake(true)
         lobbyVisit := false, modeChecked := false, modeRecheckTick := 0, modeWarned := false
+        lastNudgeTick := A_TickCount, sleepWakes := 0
         if S["BLACKOUT_ON_START"]
             ToggleBlackout(true)
         gameState := ""
@@ -715,6 +721,7 @@ SelfTest() {
     rows.Push([hasWin ? ok : no, Tx("Fortnite is open")])
     rows.Push([isActive ? ok : "⚠️", isActive ? Tx("Fortnite is the active window") : Tx("Click into Fortnite before starting")])
     rows.Push([A_IsAdmin ? ok : no, Tx("Running as Administrator")])
+    rows.Push([info, Tx("Fortnite Sleep Mode: set it to Never (Settings > Game > Energy Saving)"), true])
     txt := "Fortnite window: " (hasWin ? "found" : "NOT found") ", active: " (isActive ? "yes" : "no") ", admin: " (A_IsAdmin ? "yes" : "NO")
     for name in ["lobby", "end"] {
         t0 := A_TickCount
@@ -1643,6 +1650,10 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "Wake Fortnite from Sleep Mode (clicks Keep Playing)", "إيقاظ Fortnite من وضع السكون (يضغط Keep Playing)",
+        "Best: in Fortnite go to Settings > Game > Energy Saving and set Sleep Mode to Never.", "الأفضل: في Fortnite اذهب إلى الإعدادات > اللعبة > توفير الطاقة واضبط وضع السكون على Never.",
+        "Woke Fortnite from Sleep Mode", "تم إيقاظ Fortnite من وضع السكون",
+        "Fortnite Sleep Mode: set it to Never (Settings > Game > Energy Saving)", "وضع السكون في Fortnite: اضبطه على Never (الإعدادات > اللعبة > توفير الطاقة)",
         "Pirate Shop Access", "وصول متجر القراصنة",
         "Gizmo", "أداة",
         "Weekly treasure cosmetic", "زي الكنز الأسبوعي",
@@ -3187,7 +3198,7 @@ ScreenReaderTick() {
     }
     if (!running || !WinActive(S["GAME_WINDOW"]))
         return
-    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"])
+    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"] && !S["WAKE_FROM_SLEEP"])
         return
     if (A_TickCount - lastOcrTick < (S["WATCH_TREASURE"] ? 3 : Max(5, S["SCREEN_READER_SECONDS"])) * 1000)
         return
@@ -3216,6 +3227,8 @@ HandleScreenText(txt) {
     joined := ""
     for ln in lines
         joined .= " " StrUpper(ln.text)
+    if (S["WAKE_FROM_SLEEP"] && InStr(joined, "SLEEP MODE") && WakeFromSleep(lines))
+        return
     spect := InStr(joined, "SPECTATING") || InStr(joined, "NEXT TEAMMATE") || InStr(joined, "PREVIOUS TEAMMATE")
     if (spect && gameState != "spectating") {
         gameState := "spectating"
@@ -4170,6 +4183,7 @@ MainLoop() {
         lobbyVisit := false
         if (S["WAIT_FOR_SQUAD"] && gameState = "spectating") {
             SetStatus("👻 " Tx("Waiting for my squad to finish"))
+            AntiSleepNudge()
             lastProgress := A_TickCount
             SleepActive(1000)
             return
@@ -4208,6 +4222,7 @@ MainLoop() {
         }
         if modeRecheckTick {
             SetStatus("⚠️ " Tx("Wrong mode, waiting (Settings > Mode)"))
+            AntiSleepNudge()
             lastProgress := A_TickCount
             SleepActive(1000)
             return
@@ -4227,6 +4242,7 @@ MainLoop() {
     ; eliminated: stop moving while spectating teammates
     if (gameState = "spectating" && S["SPECTATE_IDLE"]) {
         SetStatus("👻 " Tx("Spectating teammates"))
+        AntiSleepNudge()
         SleepActive(1000)
         return
     }
@@ -4784,6 +4800,8 @@ OpenSettings(startPage := 1) {
     tick("SPECTATE_IDLE", "Stop moving while I'm spectating teammates", "y+16")
     tick("WAIT_FOR_SQUAD", "Don't click Play Again while my teammates are still playing")
     hint(Tx("Treasure your teammates find only counts if you're still in the match."))
+    tick("WAKE_FROM_SLEEP", "Wake Fortnite from Sleep Mode (clicks Keep Playing)", "y+12")
+    hint(Tx("Best: in Fortnite go to Settings > Game > Energy Saving and set Sleep Mode to Never."))
     tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+8")
     hint(Tx("Turn on Settings > Treasure to get told when you get gizmos, treasure cosmetics or pirate tokens."), "y+16")
 
@@ -5078,7 +5096,7 @@ SaveSettingsGui(g, c) {
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
-                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
+                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
                 "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
@@ -5142,4 +5160,50 @@ SaveSettingsGui(g, c) {
         return
     }
     ShowTip(Tx("Saved.") "`n" Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
+}
+
+; ============================================================
+; v7.6: Fortnite Sleep Mode
+; Fortnite sleeps after 5-60 minutes with no input (15 by default). In the queue that cancels
+; matchmaking; Keep Playing takes you back (or to the lobby).
+; ============================================================
+WakeFromSleep(lines) {
+    global sleepWakes, lastNudgeTick, clicks, lastProgress, lobbyVisit
+    static lastWake := 0
+    if (!running || !WinActive(S["GAME_WINDOW"]) || A_TickCount - lastWake < 8000)
+        return false
+    for ln in lines {
+        if (Trim(StrUpper(ln.text)) != "KEEP PLAYING")
+            continue
+        lastWake := A_TickCount
+        sleepWakes += 1
+        ReleaseAll()
+        MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+        Sleep(200)
+        Click()
+        clicks += 1
+        lastNudgeTick := A_TickCount
+        lastProgress := A_TickCount
+        lobbyVisit := false
+        Log("Fortnite was in Sleep Mode: clicked Keep Playing (" sleepWakes " this run)")
+        SetStatus("😴 " Tx("Woke Fortnite from Sleep Mode"))
+        if (sleepWakes = 1 || Mod(sleepWakes, 10) = 0)
+            Discord("😴 Fortnite went into **Sleep Mode**, clicked Keep Playing (" sleepWakes "x this run). "
+                . "Tip: in Fortnite set Settings > Game > Energy Saving > Sleep Mode to **Never**.")
+        return true
+    }
+    return false
+}
+
+; A tiny camera turn every few minutes while Lobby Loop is standing still on purpose,
+; so Fortnite doesn't count you as inactive
+AntiSleepNudge() {
+    global lastNudgeTick
+    if (!S["WAKE_FROM_SLEEP"] || A_TickCount - lastNudgeTick < 240000 || !CanAct())
+        return
+    lastNudgeTick := A_TickCount
+    dx := Random(15, 40) * (Random(0, 1) ? 1 : -1)
+    Look(dx, 0, 3)
+    Sleep(150)
+    Look(-dx, 0, 3)
 }
