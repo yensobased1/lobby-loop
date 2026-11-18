@@ -2930,6 +2930,30 @@ HandleCommand(text, authorId := "") {
                 . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
+        case "timer":
+            if (arg = "" || StrLower(arg) = "off" || arg = "0") {
+                SaveStop(0, 0, "")
+            } else if (ck := ParseClock(arg)) {
+                SaveStop(0, 0, Format("{:02}:{:02}", ck.h, ck.m))
+            } else if (dur := ParseDuration(arg)) {
+                SaveStop(dur.h, dur.m, "")
+            } else {
+                Discord(who "couldn't understand ``" arg "``. Try ``!timer 2h``, ``!timer 90m``, ``!timer 9:30pm`` or ``!timer off``.")
+                return
+            }
+            if running
+                ApplyStopLimits()
+            Discord(who "⏰ stop: **" DescribeStop() "**")
+        case "profile":
+            want := StrLower(arg)
+            if !HasValue(PROFILE_KEYS, want) {
+                Discord(who "profiles: ``!profile overnight``, ``!profile quick``, ``!profile chill``, ``!profile custom``")
+                return
+            }
+            ApplyProfile(want)
+            if running
+                ApplyStopLimits()
+            Discord(who "🎚️ profile: **" ProfileLabel(want) "**, stop: " DescribeStop())
         case "status":
             Discord(who StatusText())
         case "start":
