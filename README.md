@@ -2,14 +2,14 @@
 
 # 🔁 Lobby Loop
 
-**Set-and-forget AFK (Away From Keyboard) helper for Fortnite squad fills.** Your teammates carry and farm for you while you're away: Lobby Loop readies up in the mode you pick, clicks Play Again, moves like a person, spots treasure and stops on a timer.
+**Set-and-forget AFK (Away From Keyboard) helper for Fortnite squad fills.** Your teammates farm chests for you while you bot: Lobby Loop readies up in the mode you pick, clicks Play Again, moves like a person, spots treasure and stops on a timer.
 
 ## ✨ Features
 - 🔁 **Auto queue:** clicks Ready / Play and Play Again by itself (16:9, 16:10 and 21:9 screens)
 - 🎯 **Mode check:** Solo / Duo / Trio / Squad, Build / Zero Build, Fill / No fill, checked before every Ready
-- 🤝 **Squad fill extras:** let teammates pick the drop, hide mode, Stay with team, team chat message, gg when eliminated
+- 🤝 **Squad fill:** stops moving while you spectate teammates and clicks reward buttons by itself
 - 🏴‍☠️ **Treasure watcher:** Sprite gizmos, weekly treasure cosmetics, pirate tokens, with a sound, a screenshot and a clip of the 20 seconds before
-- ☕ **Human-like:** breaks, random wait before Ready, stop after X matches, keeps the PC awake
+- ⚙️ **Extras:** stop after X matches, keep the PC awake, Fortnite volume, hide the status box from streams
 - 🚶 **Human-like movement:** walks, sprints, slides, crouches, strafes, jumps, dives, swaps weapons and looks around
 - 🧙 **Setup wizard** and **profiles** (Overnight, Quick 1 hour, Chill)
 - 🌍 **English / العربية**

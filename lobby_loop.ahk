@@ -23,22 +23,20 @@ ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby
 
 CHANGELOG := [
     "v7.6  (18 Nov 2026)",
-    "  Lobby Loop is made for AFKing in squad fills: your teammates carry and farm",
-    "  for you while you're away.",
+    "  Lobby Loop is made for AFKing in squad fills: your teammates farm chests",
+    "  for you while you bot.",
     "  + Settings > Mode: pick Solo / Duo / Trio / Squad, Build / Zero Build and",
     "    Fill / No fill. It checks the lobby before readying up (and can try to switch)",
-    "  + Settings > Squad fill: let teammates pick the drop, hide mode, Stay with team,",
-    "    team chat message at the start, gg when eliminated",
+    "  + Settings > Squad fill: stop moving while spectating, reward clicks",
     "  + Settings > Treasure (its own section): gizmos, weekly treasure cosmetics and",
     "    pirate tokens with their own words, a sound, and a clip of the 20 seconds",
     "    before + 5 seconds after (Game Bar, NVIDIA or your own clip key)",
     "  + Clips go to Discord by themselves when they're under 10 MB",
     "  + Read the screen now: shows what Lobby Loop sees, to tune the words",
-    "  + 10 more extras: keep the PC awake, stop after X matches, human-like breaks,",
-    "    random wait before Ready, Fortnite volume, hide the status box from streams,",
-    "    and the squad-fill ones above",
+    "  + Extras: keep the PC awake, stop after X matches, Fortnite volume,",
+    "    hide the status box from streams",
     "  + Bigger Settings window with 12 sections",
-    "  + New phone commands: !mode !clip !read !chat !break",
+    "  + New phone commands: !mode !clip !read",
     "",
     "v7.5  (18 Nov 2026)",
     "  + Screen reader: knows when you're spectating and stops moving",
@@ -227,22 +225,8 @@ DEFAULTS := [
     ["MODE_FILL", "any", "Fill: any, fill or nofill"],
     ["MODE_ACTION", "wait", "If the lobby is on the wrong mode: wait (and tell you) or ready (ready up anyway)"],
     ["MODE_SWITCH", 0, "1 = try to switch to your mode by itself (experimental)"],
-    ["FOLLOW_DROP", 1, "1 = don't jump off the bus yourself, let your teammates pick the drop"],
-    ["FOLLOW_DROP_MIN", 4, "...for this many minutes after Ready / Play Again"],
-    ["HIDE_MODE", 0, "1 = after landing, mostly stand still to stay alive longer"],
-    ["HIDE_AFTER_MIN", 5, "...starting this many minutes after Ready / Play Again"],
-    ["STAY_WITH_TEAM", 0, "1 = click Stay with team instead of Play Again"],
-    ["CHAT_START", 0, "1 = send a chat message to your team at the start of each match"],
-    ["CHAT_START_TEXT", "AFK for a bit, good luck!", "The start-of-match message"],
-    ["CHAT_DELAY", 75, "Seconds after Ready / Play Again to send the start message"],
-    ["CHAT_GG", 0, "1 = send a message when you're eliminated"],
-    ["CHAT_GG_TEXT", "gg", "The eliminated message"],
     ["KEEP_AWAKE", 1, "1 = keep the PC from sleeping while running"],
     ["MATCH_LIMIT", 0, "Stop after this many matches (0 = no limit)"],
-    ["BREAKS", 0, "1 = take human-like breaks in the lobby"],
-    ["BREAK_EVERY_MIN", 90, "Take a break about every this many minutes"],
-    ["BREAK_MIN", 10, "Breaks last about this many minutes"],
-    ["READY_DELAY_MAX", 3, "Wait a random 1 to this many seconds before clicking Ready (0 = off)"],
     ["GAME_VOLUME", 100, "Fortnite volume while running, 0-100 (100 = leave it alone)"],
     ["STREAM_HIDE", 0, "1 = hide the status box from OBS, streams and screenshots"],
     ["AUTO_CLAIM", 1, "1 = click buttons that just say Continue, Collect, Claim, Accept..."],
@@ -278,7 +262,6 @@ DEFAULTS := [
     ["KEY_SPRINT", "LShift", "Your Fortnite sprint key"],
     ["KEY_CROUCH", "LCtrl", "Your Fortnite crouch key"],
     ["KEY_SLOTS", "1,2,3,4,5", "Your weapon slot keys, separated by commas"],
-    ["KEY_CHAT", "Enter", "Your Fortnite chat key"],
     ["WALK_MIN", 500, "Shortest walk, ms (1000 = 1 second)"],
     ["WALK_MAX", 2200, "Longest walk, ms"],
     ["COMBO_CHANCE", 35, "% chance to walk diagonally"],
@@ -406,15 +389,10 @@ lastOcrTick := 0
 lastClaimTick := 0
 dashOpenTick := 0
 scriptStartTick := A_TickCount
-matchStartTick := 0    ; when the current match started (Ready / Play Again clicked)
-chatDueTick := 0       ; when to send the start-of-match chat message
-readyAtTick := 0       ; random wait before clicking Ready
 lobbyVisit := false    ; true while the lobby button is on screen
 modeChecked := false
 modeRecheckTick := 0
 modeWarned := false
-breakNextTick := 0
-breakUntilTick := 0
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
@@ -425,9 +403,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
                "TREASURE_TOKEN_WORDS", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
-               "MODE_ACTION", "MODE_SWITCH", "FOLLOW_DROP", "FOLLOW_DROP_MIN", "HIDE_MODE", "HIDE_AFTER_MIN",
-               "STAY_WITH_TEAM", "CHAT_GG", "KEEP_AWAKE", "MATCH_LIMIT", "BREAKS", "BREAK_EVERY_MIN", "BREAK_MIN",
-               "READY_DELAY_MAX", "GAME_VOLUME"]
+               "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
 CheckSafeMode()
 OnExit(OnExitHandler)
 OnError(OnErrorHandler)
@@ -450,8 +426,7 @@ HOTKEY_FIELDS := [["HOTKEY_TOGGLE", "Start / Stop"], ["HOTKEY_SETTINGS", "Settin
                   ["HOTKEY_BLACKOUT", "Dim screen"], ["HOTKEY_OVERLAY", "Show / hide status box"],
                   ["HOTKEY_TEACH", "Teach a popup button"], ["HOTKEY_EXIT", "Exit"]]
 GAMEKEY_FIELDS := [["KEY_FORWARD", "Forward"], ["KEY_LEFT", "Left"], ["KEY_BACK", "Back"], ["KEY_RIGHT", "Right"],
-                   ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"], ["KEY_SLOTS", "Weapon slots"],
-                   ["KEY_CHAT", "Chat"]]
+                   ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"], ["KEY_SLOTS", "Weapon slots"]]
 
 ; ---------- Button detection ----------
 SCALE := Min(A_ScreenWidth / 2560, A_ScreenHeight / 1440)   ; works for 16:9, 16:10 and 21:9
@@ -613,8 +588,7 @@ ValidKey(keyName) {
 }
 
 ToggleRun(reason := "you") {
-    global gameState, matchStartTick, chatDueTick, readyAtTick, lobbyVisit, modeChecked, modeRecheckTick, modeWarned
-    global breakNextTick, breakUntilTick
+    global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
     global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries
     autoStartArmed := false
@@ -653,9 +627,7 @@ ToggleRun(reason := "you") {
             SetGameVolume(Number(S["GAME_VOLUME"]))
         if S["KEEP_AWAKE"]
             KeepAwake(true)
-        matchStartTick := 0, chatDueTick := 0, readyAtTick := 0, lobbyVisit := false
-        modeChecked := false, modeRecheckTick := 0, modeWarned := false
-        breakNextTick := 0, breakUntilTick := 0
+        lobbyVisit := false, modeChecked := false, modeRecheckTick := 0, modeWarned := false
         if S["BLACKOUT_ON_START"]
             ToggleBlackout(true)
         gameState := ""
@@ -1655,16 +1627,11 @@ GuiOpts(extra := "") {
 LoadTranslations() {
     return Map(
         "'{1}' should be a number from {2} to {3}.", "يجب أن تكون '{1}' رقمًا من {2} إلى {3}.",
-        "...for the first this many minutes of a match:", "...لأول هذا العدد من الدقائق في المباراة:",
-        "...starting this many minutes into the match:", "...بدءًا من هذا العدد من الدقائق في المباراة:",
         "Add a screenshot", "إضافة لقطة شاشة",
-        "After a match, click 'Stay with team' instead of Play Again", "بعد المباراة، اضغط 'Stay with team' بدلًا من Play Again",
         "All of it is saved in {1}. Use it to tune the treasure words.", "كل النص محفوظ في {1}. استخدمه لضبط كلمات الكنوز.",
         "Any", "أي",
         "Before readying up, Lobby Loop reads the mode button in the lobby (for example 'Build, Squad, Fill').", "قبل الاستعداد، يقرأ Lobby Loop زر الوضع في الردهة (مثلًا 'Build, Squad, Fill').",
-        "Break until {1}", "استراحة حتى {1}",
         "Build", "البناء",
-        "Chat", "الدردشة",
         "Check the lobby mode now", "افحص وضع الردهة الآن",
         "Click into Fortnite. Checking in {1} seconds...", "اضغط داخل Fortnite. الفحص بعد {1} ثوانٍ...",
         "Clip key", "زر المقطع",
@@ -1672,20 +1639,15 @@ LoadTranslations() {
         "Clip saved", "تم حفظ المقطع",
         "Clip with", "التسجيل بواسطة",
         "Couldn't read the mode button. Open the Fortnite lobby first.", "تعذرت قراءة زر الوضع. افتح ردهة Fortnite أولًا.",
-        "Every this many minutes:", "كل هذا العدد من الدقائق:",
         "Fill", "التعبئة",
-        "For about this many minutes:", "لمدة هذا العدد من الدقائق تقريبًا:",
-        "Hide mode: after landing, mostly stand still to stay alive longer", "وضع الاختباء: بعد الهبوط، ابقَ ثابتًا غالبًا لتبقى حيًا أطول",
         "Hide the status box from OBS / streams / screenshots", "إخفاء مربع الحالة عن OBS والبث ولقطات الشاشة",
-        "Hiding (staying still)", "اختباء (ثابت في مكانه)",
         "If the mode is wrong", "إذا كان الوضع خاطئًا",
         "Keep the PC awake while running", "إبقاء الكمبيوتر مستيقظًا أثناء التشغيل",
-        "Let teammates pick the drop (no jumping off the bus myself)", "دع زملائي يختارون مكان الهبوط (بدون القفز من الحافلة بنفسي)",
-        "Letting teammates pick the drop", "الزملاء يختارون مكان الهبوط",
-        "Lobby Loop keeps you in squad fills while you're away, so your teammates can carry and farm for you.", "يبقيك Lobby Loop في فرق التعبئة أثناء غيابك، ليحملك زملاؤك ويجمعوا لك.",
+        "Turn on Settings > Treasure to get told when you get gizmos, treasure cosmetics or pirate tokens.", "فعّل الإعدادات > الكنوز ليتم إخبارك عندما تحصل على أدوات أو أزياء كنوز أو رموز قراصنة.",
+        "Start by itself, every day or with Windows.", "يبدأ وحده، كل يوم أو مع Windows.",
+        "Lobby Loop keeps you in squad fills while you're away, so your teammates can farm chests for you while you bot.", "يبقيك Lobby Loop في فرق التعبئة أثناء غيابك، ليفتح زملاؤك الصناديق ويجمعوا لك وأنت تستخدم البوت.",
         "Lobby is on: {1}", "الردهة على: {1}",
-        "Made for AFKing in squad fills: stay alive, stay polite, stay with good teammates.", "مصمم للغياب في فرق التعبئة: ابقَ حيًا، كن مهذبًا، وابقَ مع الزملاء الجيدين.",
-        "Match {1} done, stayed with team", "انتهت المباراة {1}، تم البقاء مع الفريق",
+        "Your teammates open chests and farm while you bot. Lobby Loop keeps you queued, moving and out of the way.", "زملاؤك يفتحون الصناديق ويجمعون وأنت تستخدم البوت. يبقيك Lobby Loop في الطابور ويتحرك ولا يعيقهم.",
         "Mode", "الوضع",
         "Mode check", "فحص الوضع",
         "My own clip key (Medal, OBS...)", "زر المقطع الخاص بي (Medal، OBS...)",
@@ -1702,20 +1664,15 @@ LoadTranslations() {
         "Read the screen now", "اقرأ الشاشة الآن",
         "Reading the screen...", "جارٍ قراءة الشاشة...",
         "Ready up anyway", "استعد على أي حال",
-        "Readying up in {1} s", "الاستعداد بعد {1} ث",
         "Recent finds", "آخر ما وُجد",
         "Save a clip (20 s before + 5 s after)", "حفظ مقطع (20 ث قبل + 5 ث بعد)",
-        "Send a chat message to my team at the start of each match", "إرسال رسالة لفريقي في بداية كل مباراة",
-        "Send a message when I'm eliminated", "إرسال رسالة عند إقصائي",
         "Send the clip to Discord (if under 10 MB)", "إرسال المقطع إلى Discord (إذا كان أقل من 10 ميغابايت)",
         "Set your recorder's clip length to 25 seconds (Game Bar: 30).", "اضبط طول المقطع في برنامج التسجيل على 25 ثانية (Game Bar: ‏30).",
         "Spots treasure on screen and tells you, with a screenshot or a clip.", "يرصد الكنوز على الشاشة ويخبرك، مع لقطة شاشة أو مقطع.",
         "Sprite gizmos", "أدوات Sprite",
         "Squad fill", "تعبئة الفريق",
-        "Start by itself, every day or with Windows, and take breaks.", "يبدأ وحده، كل يوم أو مع Windows، ويأخذ استراحات.",
         "Stop after this many matches (0 = no limit):", "التوقف بعد هذا العدد من المباريات (0 = بلا حد):",
         "Stopped: {1} matches done", "توقف: انتهت {1} مباريات",
-        "Take human-like breaks", "أخذ استراحات مثل البشر",
         "Team size", "حجم الفريق",
         "Tell Discord", "إخبار Discord",
         "Test the clip key", "اختبار زر المقطع",
@@ -1724,7 +1681,6 @@ LoadTranslations() {
         "Treasure", "الكنوز",
         "Try to switch the mode for me (experimental)", "حاول تبديل الوضع لي (تجريبي)",
         "Wait (seconds)", "الانتظار (ثوانٍ)",
-        "Wait a random 1 to this many seconds before clicking Ready:", "انتظر عددًا عشوائيًا من 1 إلى هذا العدد من الثواني قبل الضغط على Ready:",
         "Wait and tell me", "انتظر وأخبرني",
         "Watch for treasure", "مراقبة الكنوز",
         "Weekly treasure cosmetics", "أزياء الكنوز الأسبوعية",
@@ -2629,7 +2585,7 @@ HandleCommand(text, authorId := "") {
     cmd := StrLower(parts[1])
     target := parts.Length >= 2 ? Trim(parts[2]) : ""
     arg := ""
-    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode" || cmd = "chat") {   ; these take a value, not a PC name
+    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode") {   ; these take a value, not a PC name
         arg := target
         target := ""
     }
@@ -2644,8 +2600,8 @@ HandleCommand(text, authorId := "") {
                 . "📸 ``!ss`` ``!watch 10`` / ``!watch off`` ``!live`` ``!panel`` ``!log```n"
                 . "⏰ ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight```n"
                 . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
-                . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups`` ``!break```n"
-                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!chat hi team```n"
+                . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
+                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any```n"
                 . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
@@ -2786,22 +2742,6 @@ HandleCommand(text, authorId := "") {
                 if (StrLen(all) < 1500 && StrLen(ln.text) >= 3)
                     all .= ln.text " · "
             Discord(who "🔎 on screen: " (all != "" ? all : "no text found"))
-        case "chat":
-            if (arg = "")
-                Discord(who "type ``!chat`` and a message, e.g. ``!chat be right back``")
-            else if !running
-                Discord(who "start Lobby Loop first (``!start``).")
-            else {
-                SendChat(arg)
-                Discord(who "💬 sent to team chat: " arg)
-            }
-        case "break":
-            if running {
-                PauseFor(10)
-                Discord(who "☕ taking a 10 minute break. ``!resume`` to come back early.")
-            } else {
-                Discord(who "not running.")
-            }
         case "cancel":
             if (pendingAction != "") {
                 ToggleRun()                                   ; cancels the countdown
@@ -3074,7 +3014,7 @@ WizardPage() {
         case 1:
             g.Add("Text", "w460 y+6", Tx("Welcome to Lobby Loop"))
             g.SetFont("s10 norm")
-            g.Add("Text", "w460 y+10", Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can carry and farm for you."))
+            g.Add("Text", "w460 y+10", Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can farm chests for you while you bot."))
             g.Add("Text", "w460 y+8", Tx("Pick your language and your name."))
             g.Add("Text", "y+12", Tx("Language"))
             ctrls["LANG"] := UiDDL(g, "w220", ["English", "العربية"])
@@ -3255,8 +3195,6 @@ HandleScreenText(txt) {
     if (spect && gameState != "spectating") {
         gameState := "spectating"
         Log("Spectating detected")
-        if (S["CHAT_GG"] && running)
-            SetTimer(() => SendChat(S["CHAT_GG_TEXT"]), -2500)
     } else if (!spect && gameState = "spectating") {
         gameState := "match"
         Log("Back from spectating")
@@ -4140,7 +4078,7 @@ DoSwap() {
 ; ============================================================
 MainLoop() {
     global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil
-    global matchStartTick, chatDueTick, readyAtTick, lobbyVisit, modeChecked, modeRecheckTick
+    global lobbyVisit, modeChecked, modeRecheckTick
     if !running
         return
 
@@ -4205,11 +4143,6 @@ MainLoop() {
     ; end screen
     if (A_TickCount - lastClick["end"] >= S["CLICK_COOLDOWN"] && FindButton("end")) {
         lobbyVisit := false
-        if BreakActive() {
-            lastProgress := A_TickCount
-            SleepActive(1500)
-            return
-        }
         ; save the result areas (and a screenshot) before Play Again changes the screen
         gotCrops := false, shot := ""
         if S["READ_RESULTS"]
@@ -4218,41 +4151,23 @@ MainLoop() {
             shot := TakeScreenshot()
         limit := Integer(S["MATCH_LIMIT"])
         if (limit > 0 && matches + 1 >= limit) {
-            OnMatchEnd(gotCrops, shot, false)
+            OnMatchEnd(gotCrops, shot)
             ToggleRun("match limit reached (" limit ")")
             SetStatus(Tx("Stopped: {1} matches done", limit))
             StartStopAction()
             return
         }
-        stayed := S["STAY_WITH_TEAM"] && StayWithTeamClick()
-        if stayed {
-            lastClick["end"] := A_TickCount
-            gameState := "end"
-        }
-        if (stayed || TryClick("end")) {
-            OnMatchEnd(gotCrops, shot, stayed)
+        if TryClick("end") {
+            OnMatchEnd(gotCrops, shot)
             return
         }
     }
 
-    ; lobby: breaks, random wait, mode check, then Ready / Play
+    ; lobby: mode check, then Ready / Play
     if (A_TickCount - lastClick["lobby"] >= S["CLICK_COOLDOWN"] && FindButton("lobby")) {
         if !lobbyVisit {                                ; just got to the lobby
             lobbyVisit := true
             modeChecked := false, modeRecheckTick := 0
-            maxWait := Number(S["READY_DELAY_MAX"])
-            readyAtTick := (maxWait >= 1) ? A_TickCount + Random(1000, Round(maxWait * 1000)) : 0
-        }
-        if BreakActive() {
-            lastProgress := A_TickCount
-            SleepActive(1500)
-            return
-        }
-        if (readyAtTick && A_TickCount < readyAtTick) {
-            SetStatus("⏳ " Tx("Readying up in {1} s", Ceil((readyAtTick - A_TickCount) / 1000)))
-            lastProgress := A_TickCount
-            SleepActive(300)
-            return
         }
         if (!modeChecked || (modeRecheckTick && A_TickCount >= modeRecheckTick)) {
             modeChecked := true
@@ -4284,25 +4199,11 @@ MainLoop() {
         SleepActive(1000)
         return
     }
-    if (gameState != "spectating" && gameState != "match") {      ; a new match (or queue) just started
+    if (gameState != "spectating")
         gameState := "match"
-        matchStartTick := A_TickCount
-        chatDueTick := S["CHAT_START"] ? A_TickCount + Max(10, Number(S["CHAT_DELAY"])) * 1000 : 0
-    }
-    if (chatDueTick && A_TickCount >= chatDueTick) {
-        chatDueTick := 0
-        SendChat(S["CHAT_START_TEXT"])
-    }
 
-    ; 2) Hide mode: mostly stand still once the match is going
-    if (S["HIDE_MODE"] && gameState = "match" && MatchMinutes() >= Number(S["HIDE_AFTER_MIN"])) {
-        DoHide()
-        return
-    }
-
-    ; 3) Move around like a person (no jumping / diving while teammates pick the drop)
-    early := S["FOLLOW_DROP"] && MatchMinutes() < Number(S["FOLLOW_DROP_MIN"])
-    SetStatus(early ? "🚌 " Tx("Letting teammates pick the drop") : Tx("Walking"))
+    ; 2) Move around like a person
+    SetStatus(Tx("Walking"))
     if Chance(S["SLIDE_CHANCE"])
         DoSlide()
     else if Chance(S["CROUCH_CHANCE"])
@@ -4311,9 +4212,9 @@ MainLoop() {
         DoStrafe()
     else
         DoWalk()
-    if (!early && CanAct() && Chance(S["JUMP_CHANCE"]))
+    if (CanAct() && Chance(S["JUMP_CHANCE"]))
         DoJump()
-    if (!early && CanAct() && Chance(S["DIVE_CHANCE"])) {
+    if (CanAct() && Chance(S["DIVE_CHANCE"])) {
         SetStatus(Tx("Diving"))
         DoDive()
     }
@@ -4328,15 +4229,14 @@ MainLoop() {
 }
 
 ; Counts a finished match, reads the result, tells Discord
-OnMatchEnd(gotCrops, shot, stayed := false) {
-    global matches, totalMatches, lastProgress, unstickTries, matchStartTick, chatDueTick
+OnMatchEnd(gotCrops, shot) {
+    global matches, totalMatches, lastProgress, unstickTries
     matches += 1
     totalMatches += 1
     lastProgress := A_TickCount
     unstickTries := 0
-    matchStartTick := 0, chatDueTick := 0
     IniWrite(totalMatches, STATS_FILE, "Stats", "TotalMatches")
-    SetStatus(stayed ? Tx("Match {1} done, stayed with team", matches) : Tx("Match {1} done, Play Again clicked", matches))
+    SetStatus(Tx("Match {1} done, Play Again clicked", matches))
     res := gotCrops ? ReadResults() : {place: "", xp: ""}
     RecordMatch(res)
     info := (res.place != "" ? ", placed #" res.place : "") (res.xp != "" ? ", " FormatNumber(res.xp) " XP" : "")
@@ -4665,39 +4565,7 @@ ModeCheckBeforeReady() {
     return StrLower(S["MODE_ACTION"]) = "ready"
 }
 
-; ============================================================
-; v7.6: squad-fill helpers and extras
-; ============================================================
-SendChat(text) {
-    text := Trim(String(text))
-    if (text = "" || !CanAct())
-        return
-    ReleaseAll()
-    Send("{" S["KEY_CHAT"] "}")
-    Sleep(450)
-    SendText(text)
-    Sleep(250)
-    Send("{Enter}")
-    Log("Chat: " text)
-}
 
-; Stay with team: on the end screen, click "STAY WITH TEAM" instead of Play Again
-StayWithTeamClick() {
-    global clicks
-    W := A_ScreenWidth, H := A_ScreenHeight
-    for ln in OcrRegionSync(Round(W * 0.60), Round(H * 0.20), Round(W * 0.40), Round(H * 0.65)) {
-        if InStr(StrUpper(ln.text), "STAY WITH TEAM") {
-            ReleaseAll()
-            MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
-            Sleep(180)
-            Click()
-            clicks += 1
-            Log("Clicked Stay with team")
-            return true
-        }
-    }
-    return false
-}
 
 KeepAwake(on) {
     ; ES_CONTINUOUS | ES_SYSTEM_REQUIRED while running, back to normal when stopped
@@ -4742,48 +4610,8 @@ SetGameVolume(pct) {
     return found
 }
 
-; Human-like breaks: every BREAK_EVERY_MIN minutes, a pause of about BREAK_MIN minutes
-BreakActive() {
-    global breakNextTick, breakUntilTick
-    if !S["BREAKS"]
-        return false
-    if (breakUntilTick && A_TickCount < breakUntilTick) {
-        SetStatus("☕ " Tx("Break until {1}", FormatTime(DateAdd(A_Now, (breakUntilTick - A_TickCount) // 1000, "Seconds"), "h:mm tt")))
-        return true
-    }
-    if breakUntilTick {                                ; break just ended
-        breakUntilTick := 0
-        Log("Break over")
-    }
-    if !breakNextTick
-        breakNextTick := sessionStart + Max(10, Number(S["BREAK_EVERY_MIN"])) * 60000
-    if (A_TickCount >= breakNextTick) {
-        mins := Max(1, Number(S["BREAK_MIN"]))
-        breakUntilTick := A_TickCount + Random(Round(mins * 0.6 * 60000), Round(mins * 1.4 * 60000))
-        breakNextTick := breakUntilTick + Max(10, Number(S["BREAK_EVERY_MIN"])) * 60000
-        ReleaseAll()
-        Log("Break started")
-        return true
-    }
-    return false
-}
 
-; Minutes since the current match started (0 if not in a match)
-MatchMinutes() {
-    return matchStartTick ? (A_TickCount - matchStartTick) / 60000 : 0
-}
 
-; Hide mode: mostly stand still and look around, to stay alive longer while teammates play
-DoHide() {
-    SetStatus("🫥 " Tx("Hiding (staying still)"))
-    r := Random(1, 100)
-    if (r <= 70)
-        SleepActive(Random(2000, 5000))
-    else if (r <= 90)
-        Look(Random(-250, 250), Random(-20, 20), 12)
-    else
-        HoldKeys([KEYMAP[Pick(["fwd", "left", "back", "right"])]], Random(250, 500))
-}
 
 ; ============================================================
 ; v7.6: Settings window (12 sections)
@@ -4837,7 +4665,7 @@ OpenSettings(startPage := 1) {
     }
 
     ; ---- 1. Play ----
-    newPage(Tx("Play"), Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can carry and farm for you."))
+    newPage(Tx("Play"), Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can farm chests for you while you bot."))
     say(Tx("Profile"), "y+16")
     c["PROFILE"] := add(UiDDL(g, "x" CX " y+4 w300", [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")]))
     c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
@@ -4873,36 +4701,19 @@ OpenSettings(startPage := 1) {
     mb.OnEvent("Click", (*) => (g.Destroy(), ShowModeCheck(3000)))
 
     ; ---- 3. Squad fill ----
-    newPage(Tx("Squad fill"), Tx("Made for AFKing in squad fills: stay alive, stay polite, stay with good teammates."))
+    newPage(Tx("Squad fill"), Tx("Your teammates open chests and farm while you bot. Lobby Loop keeps you queued, moving and out of the way."))
     tick("SPECTATE_IDLE", "Stop moving while I'm spectating teammates", "y+16")
-    tick("FOLLOW_DROP", "Let teammates pick the drop (no jumping off the bus myself)")
-    say(Tx("...for the first this many minutes of a match:"), "y+4")
-    edit("FOLLOW_DROP_MIN", "y+4 w120")
-    tick("HIDE_MODE", "Hide mode: after landing, mostly stand still to stay alive longer", "y+12")
-    say(Tx("...starting this many minutes into the match:"), "y+4")
-    edit("HIDE_AFTER_MIN", "y+4 w120")
-    tick("STAY_WITH_TEAM", "After a match, click 'Stay with team' instead of Play Again", "y+12")
-    tick("CHAT_START", "Send a chat message to my team at the start of each match", "y+8")
-    edit("CHAT_START_TEXT", "y+4 w" CW)
-    tick("CHAT_GG", "Send a message when I'm eliminated", "y+8")
-    edit("CHAT_GG_TEXT", "y+4 w300")
-    tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+10")
+    tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+8")
+    hint(Tx("Turn on Settings > Treasure to get told when you get gizmos, treasure cosmetics or pirate tokens."), "y+16")
 
     ; ---- 4. Schedule ----
-    newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows, and take breaks."))
+    newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows."))
     say(Tx("Start every day at:"), "y+16")
     c["START"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["START_AT_TIME"])))
     hint(Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
     tick("AUTO_START", "Start by itself when I click into Fortnite", "y+14")
     tick("LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)")
     tick("START_WITH_WINDOWS", "Start with Windows")
-    tick("BREAKS", "Take human-like breaks", "y+14")
-    say(Tx("Every this many minutes:") , "y+4 Section", 280)
-    edit("BREAK_EVERY_MIN", "y+4 w120")
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("For about this many minutes:")))
-    c["BREAK_MIN"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["BREAK_MIN"]))
-    say(Tx("Wait a random 1 to this many seconds before clicking Ready:"), "y+14")
-    edit("READY_DELAY_MAX", "y+4 w120")
 
     ; ---- 5. Extras ----
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
@@ -5140,11 +4951,6 @@ SaveSettingsGui(g, c) {
         return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
     try {
         nums := Map("MATCH_LIMIT", num("MATCH_LIMIT", Tx("Stop after this many matches (0 = no limit):"), 0, 10000),
-                    "FOLLOW_DROP_MIN", num("FOLLOW_DROP_MIN", Tx("...for the first this many minutes of a match:"), 0, 30),
-                    "HIDE_AFTER_MIN", num("HIDE_AFTER_MIN", Tx("...starting this many minutes into the match:"), 0, 60),
-                    "BREAK_EVERY_MIN", num("BREAK_EVERY_MIN", Tx("Every this many minutes:"), 10, 1440),
-                    "BREAK_MIN", num("BREAK_MIN", Tx("For about this many minutes:"), 1, 240),
-                    "READY_DELAY_MAX", num("READY_DELAY_MAX", Tx("Wait a random 1 to this many seconds before clicking Ready:"), 0, 120),
                     "GAME_VOLUME", num("GAME_VOLUME", Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), 0, 100),
                     "CLIP_DELAY", num("CLIP_DELAY", Tx("Wait (seconds)"), 0, 60),
                     "AUTO_SCREENSHOT_MIN", num("AUTO_SCREENSHOT_MIN", Tx("Screenshot to Discord every (minutes, 0 = off):"), 0, 1440))
@@ -5189,14 +4995,14 @@ SaveSettingsGui(g, c) {
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
                 "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
-                "FOLLOW_DROP", "HIDE_MODE", "STAY_WITH_TEAM", "CHAT_START", "CHAT_GG", "BREAKS", "KEEP_AWAKE", "STREAM_HIDE",
+                "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
         if c.Has(key)
             SetSetting(key, c[key].Value)
     for key, v in nums
         SetSetting(key, v)
-    for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS", "CHAT_START_TEXT", "CHAT_GG_TEXT"]
+    for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS"]
         SetSetting(key, Trim(c[key].Value))
     SetSetting("CLIP_KEY", clipKey)
     SetSetting("CLIP_METHOD", ["gamebar", "nvidia", "custom"][c["CLIP_METHOD"].Value])
