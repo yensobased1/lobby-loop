@@ -28,9 +28,12 @@ CHANGELOG := [
     "  + Settings > Mode: pick Solo / Duo / Trio / Squad, Build / Zero Build and",
     "    Fill / No fill. It checks the lobby before readying up (and can try to switch)",
     "  + Settings > Squad fill: stop moving while spectating, reward clicks",
-    "  + Settings > Treasure (its own section): gizmos, weekly treasure cosmetics and",
-    "    pirate tokens with their own words, a sound, and a clip of the 20 seconds",
-    "    before + 5 seconds after (Game Bar, NVIDIA or your own clip key)",
+    "  + Settings > Treasure (its own section): Pirate Shop Access, gizmos and weekly",
+    "    treasure cosmetics. Only counts when Fortnite's YOU FOUND banner is on screen,",
+    "    so season words like Treasure Hunters don't set it off. Sound, screenshot and",
+    "    a clip of the 20 seconds before + 5 seconds after",
+    "  + Doesn't click Play Again while your teammates are still playing, so you keep",
+    "    the treasure they find",
     "  + Clips go to Discord by themselves when they're under 10 MB",
     "  + Read the screen now: shows what Lobby Loop sees, to tune the words",
     "  + Extras: keep the PC awake, stop after X matches, Fortnite volume,",
@@ -204,12 +207,13 @@ DEFAULTS := [
     ["ACCENT", "yellow", "Accent colour: yellow, purple, cyan, pink or green"],
     ["WATCH_TREASURE", 1, "1 = watch the screen for treasure (gizmos, pirate tokens...)"],
     ["TREASURE_WORDS", "", "Your own extra treasure words, separated by commas"],
-    ["TREASURE_GIZMO", 1, "1 = look for Sprite gizmos"],
-    ["TREASURE_GIZMO_WORDS", "GIZMO,NEW SPRITE,SPRITE UNLOCKED", "Words for Sprite gizmos"],
+    ["TREASURE_GIZMO", 1, "1 = look for gizmos (Sprite Locator, Lucky Locator...)"],
+    ["TREASURE_GIZMO_WORDS", "SPRITE LOCATOR,LUCKY LOCATOR,GOLDEN FIREWORK,EXTRACTION ACCELERATOR,PORTABLE EXTRACTOR", "Gizmo prize names (only counted with a YOU FOUND banner)"],
     ["TREASURE_COSMETIC", 1, "1 = look for the weekly treasure cosmetics"],
-    ["TREASURE_COSMETIC_WORDS", "WEEKLY TREASURE,TREASURE UNLOCKED,TREASURE FOUND,NEW COSMETIC", "Words for weekly treasure cosmetics"],
-    ["TREASURE_TOKEN", 1, "1 = look for pirate tokens"],
-    ["TREASURE_TOKEN_WORDS", "PIRATE TOKEN,DOUBLOON", "Words for pirate tokens"],
+    ["TREASURE_COSMETIC_WORDS", "SOLID GOLD", "This week's cosmetic prize names. Any other YOU FOUND prize also counts as a cosmetic"],
+    ["TREASURE_TOKEN", 1, "1 = look for Pirate Shop Access (the pirate token)"],
+    ["TREASURE_TOKEN_WORDS", "PIRATE SHOP ACCESS,SHOP ACCESS,!PIRATE SHOP ACCESS UNLOCKED", "Pirate Shop Access words. ! = counts even without the YOU FOUND banner"],
+    ["TREASURE_FOUND_WORDS", "YOU FOUND,TREASURE FOUND", "Fortnite's prize banner (top of the screen). Treasure only counts when this is on screen (blank = any line)"],
     ["TREASURE_NOTIFY", 1, "1 = Windows notification when treasure is found"],
     ["TREASURE_BEEP", 1, "1 = play a sound when treasure is found"],
     ["TREASURE_DISCORD", 1, "1 = tell Discord when treasure is found"],
@@ -231,6 +235,7 @@ DEFAULTS := [
     ["STREAM_HIDE", 0, "1 = hide the status box from OBS, streams and screenshots"],
     ["AUTO_CLAIM", 1, "1 = click buttons that just say Continue, Collect, Claim, Accept..."],
     ["SPECTATE_IDLE", 1, "1 = stop moving while you're spectating teammates"],
+    ["WAIT_FOR_SQUAD", 1, "1 = don't click Play Again while you're spectating, so you keep treasure your teammates find"],
     ["SCREEN_READER_SECONDS", 10, "How often the screen reader looks at the screen, in seconds"],
     ["AUTO_SCREENSHOT_MIN", 0, "Send a screenshot to Discord every this many minutes (0 = off)"],
     ["LIVE_STATUS", 0, "1 = keep a live status message in Discord (shows when the PC went offline)"],
@@ -312,6 +317,18 @@ for d in DEFAULTS {
         v := d[2]
     }
     S[d[1]] := IsNumber(v) ? Number(v) : v
+}
+for pair in [["TREASURE_GIZMO_WORDS", "GIZMO,NEW SPRITE,SPRITE UNLOCKED"], ["TREASURE_COSMETIC_WORDS", "WEEKLY TREASURE,TREASURE UNLOCKED,TREASURE FOUND,NEW COSMETIC"],
+            ["TREASURE_TOKEN_WORDS", "PIRATE TOKEN,DOUBLOON"]]
+    if (S[pair[1]] = pair[2]) {
+        for d in DEFAULTS
+            if (d[1] = pair[1])
+                S[pair[1]] := d[2]
+        needWrite := true
+    }
+if (S["TREASURE_WORDS"] = "GIZMO,PIRATE TOKEN,TREASURE FOUND,TREASURE UNLOCKED,NEW SPRITE,SPRITE UNLOCKED") {
+    S["TREASURE_WORDS"] := ""                     ; old v7.5 preset, now split into the categories
+    needWrite := true
 }
 for old in ["AUTO_PAUSE", "COLOR_TOLERANCE"]
     if (IniRead(INI_FILE, "Settings", old, "__missing__") != "__missing__")
@@ -401,7 +418,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "SLIDE_CHANCE", "CROUCH_CHANCE", "STRAFE_CHANCE", "SWAP_CHANCE", "LOOK_CHANCE", "IDLE_CHANCE", "IDLE_MIN",
                "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
-               "TREASURE_TOKEN_WORDS", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
+               "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
                "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
 CheckSafeMode()
@@ -1626,6 +1643,17 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "Pirate Shop Access", "وصول متجر القراصنة",
+        "Gizmo", "أداة",
+        "Weekly treasure cosmetic", "زي الكنز الأسبوعي",
+        "Prize banner (must be on screen)", "لافتة الجائزة (يجب أن تظهر على الشاشة)",
+        "Pirate Shop Access (pirate token)", "وصول متجر القراصنة (رمز القراصنة)",
+        "Gizmos (Sprite Locator, Lucky Locator...)", "الأدوات (Sprite Locator، Lucky Locator...)",
+        "Weekly treasure cosmetics (and any other prize)", "أزياء الكنز الأسبوعية (وأي جائزة أخرى)",
+        "Separate words with commas. Start a word with ! to count it without the banner.", "افصل الكلمات بفواصل. ابدأ الكلمة بـ ! لتُحسب بدون اللافتة.",
+        "Waiting for my squad to finish", "في انتظار انتهاء فريقي",
+        "Don't click Play Again while my teammates are still playing", "لا تضغط Play Again بينما زملائي ما زالوا يلعبون",
+        "Treasure your teammates find only counts if you're still in the match.", "الكنوز التي يجدها زملاؤك تُحسب لك فقط إذا كنت ما زلت في المباراة.",
         "'{1}' should be a number from {2} to {3}.", "يجب أن تكون '{1}' رقمًا من {2} إلى {3}.",
         "Add a screenshot", "إضافة لقطة شاشة",
         "All of it is saved in {1}. Use it to tune the treasure words.", "كل النص محفوظ في {1}. استخدمه لضبط كلمات الكنوز.",
@@ -1659,7 +1687,6 @@ LoadTranslations() {
         "On some PCs this also hides it from your screen. Turn it off if the status box disappears.", "على بعض الأجهزة يخفيه هذا عن شاشتك أيضًا. أوقفه إذا اختفى مربع الحالة.",
         "Or set Fortnite's volume while running (0-100, 100 = leave it):", "أو اضبط صوت Fortnite أثناء التشغيل (0-100، 100 = اتركه):",
         "Pick a clip method, or type your clip key first.", "اختر طريقة التسجيل، أو اكتب زر المقطع أولًا.",
-        "Pirate tokens", "رموز القراصنة",
         "Play a sound", "تشغيل صوت",
         "Read the screen now", "اقرأ الشاشة الآن",
         "Reading the screen...", "جارٍ قراءة الشاشة...",
@@ -1669,7 +1696,6 @@ LoadTranslations() {
         "Send the clip to Discord (if under 10 MB)", "إرسال المقطع إلى Discord (إذا كان أقل من 10 ميغابايت)",
         "Set your recorder's clip length to 25 seconds (Game Bar: 30).", "اضبط طول المقطع في برنامج التسجيل على 25 ثانية (Game Bar: ‏30).",
         "Spots treasure on screen and tells you, with a screenshot or a clip.", "يرصد الكنوز على الشاشة ويخبرك، مع لقطة شاشة أو مقطع.",
-        "Sprite gizmos", "أدوات Sprite",
         "Squad fill", "تعبئة الفريق",
         "Stop after this many matches (0 = no limit):", "التوقف بعد هذا العدد من المباريات (0 = بلا حد):",
         "Stopped: {1} matches done", "توقف: انتهت {1} مباريات",
@@ -1689,7 +1715,6 @@ LoadTranslations() {
         "When I find treasure", "عندما أجد كنزًا",
         "Windows Game Bar (Win+Alt+G)", "شريط ألعاب Windows ‏(Win+Alt+G)",
         "Windows notification", "إشعار Windows",
-        "Words are separated by commas.", "افصل بين الكلمات بفواصل.",
         "Wrong mode", "وضع خاطئ",
         "Wrong mode, waiting (Settings > Mode)", "وضع خاطئ، في الانتظار (الإعدادات > الوضع)",
         "You want: {1}", "أنت تريد: {1}",
@@ -3162,9 +3187,9 @@ ScreenReaderTick() {
     }
     if (!running || !WinActive(S["GAME_WINDOW"]))
         return
-    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"])
+    if (!S["WATCH_TREASURE"] && !S["AUTO_CLAIM"] && !S["SPECTATE_IDLE"] && !S["WAIT_FOR_SQUAD"])
         return
-    if (A_TickCount - lastOcrTick < Max(5, S["SCREEN_READER_SECONDS"]) * 1000)
+    if (A_TickCount - lastOcrTick < (S["WATCH_TREASURE"] ? 3 : Max(5, S["SCREEN_READER_SECONDS"])) * 1000)
         return
     lastOcrTick := A_TickCount
     img := A_Temp "\ll_screen.png"
@@ -4143,6 +4168,12 @@ MainLoop() {
     ; end screen
     if (A_TickCount - lastClick["end"] >= S["CLICK_COOLDOWN"] && FindButton("end")) {
         lobbyVisit := false
+        if (S["WAIT_FOR_SQUAD"] && gameState = "spectating") {
+            SetStatus("👻 " Tx("Waiting for my squad to finish"))
+            lastProgress := A_TickCount
+            SleepActive(1000)
+            return
+        }
         ; save the result areas (and a screenshot) before Play Again changes the screen
         gotCrops := false, shot := ""
         if S["READ_RESULTS"]
@@ -4250,41 +4281,89 @@ OnMatchEnd(gotCrops, shot) {
 ; ============================================================
 ; v7.6: Treasure watcher (categories, actions, clips)
 ; ============================================================
+; Checked in this order: the rarest first, cosmetics last (it also catches any other YOU FOUND prize)
 TreasureCategories() {
     cats := []
-    for c in [["gizmo", "Sprite gizmos", "TREASURE_GIZMO"], ["cosmetic", "Weekly treasure cosmetics", "TREASURE_COSMETIC"],
-              ["token", "Pirate tokens", "TREASURE_TOKEN"], ["custom", "My own words", ""]] {
+    for c in [["token", "Pirate Shop Access", "TREASURE_TOKEN"], ["gizmo", "Gizmo", "TREASURE_GIZMO"],
+              ["custom", "My own words", ""], ["cosmetic", "Weekly treasure cosmetic", "TREASURE_COSMETIC"]] {
         on := (c[3] = "") ? true : S[c[3]]
         words := (c[3] = "") ? S["TREASURE_WORDS"] : S[c[3] "_WORDS"]
         if on
-            cats.Push({key: c[1], name: c[2], words: StrSplit(StrUpper(String(words)), ",", " `t")})
+            cats.Push({key: c[1], name: c[2], words: WordList(words)})
     }
     return cats
 }
 
+WordList(text) {
+    out := []
+    for w in StrSplit(StrUpper(String(text)), ",", " `t")
+        if (w != "")
+            out.Push(w)
+    return out
+}
+
+; Season text that says "treasure" / "pirate" all the time but isn't a prize
+TreasureNoise(u) {
+    for w in ["TREASURE HUNTERS", "TREASURE HOURS", "TREASURE HUNT CHEST", "TREASURE MAP", "CAPTAIN", "EQUIP", "QUEST", "ITEM SHOP", "PLUNDER THE"]
+        if InStr(u, w)
+            return true
+    return false
+}
+
+; banner = the text is from Fortnite's "YOU FOUND ..." prize banner
+TreasureCategoryFor(u, banner) {
+    cats := TreasureCategories()
+    for cat in cats
+        for w in cat.words {
+            strong := (SubStr(w, 1, 1) = "!")
+            w2 := LTrim(w, "!")
+            if (w2 != "" && InStr(u, w2) && (banner || strong))
+                return cat
+        }
+    if banner
+        for cat in cats
+            if (cat.key = "cosmetic")
+                return cat                              ; any other prize from the banner
+    return ""
+}
+
 CheckTreasure(lines) {
     static seen := Map()
-    cats := TreasureCategories()
+    W := A_ScreenWidth, H := A_ScreenHeight
+    foundWords := WordList(S["TREASURE_FOUND_WORDS"])
+    hits := []
     for ln in lines {
         u := StrUpper(ln.text)
-        if (InStr(u, "EQUIP") || InStr(u, "TREASURE HUNTERS"))
+        if TreasureNoise(u)
             continue
-        hit := ""
-        for cat in cats {
-            for w in cat.words
-                if (w != "" && InStr(u, w)) {
-                    hit := cat
+        isBanner := !foundWords.Length
+        if !isBanner
+            for w in foundWords
+                if (InStr(u, w) && ln.y < H * 0.5) {        ; the prize banner is at the top of the screen
+                    isBanner := true
                     break
                 }
-            if IsObject(hit)
-                break
+        if isBanner {
+            txt := ln.text                                  ; add the lines right next to it (same banner)
+            for other in lines
+                if (other != ln && Abs(other.y - ln.y) < Max(ln.h, 20) * 3 && other.y < H * 0.5
+                    && Abs((other.x + other.w / 2) - (ln.x + ln.w / 2)) < W * 0.25 && !TreasureNoise(StrUpper(other.text)))
+                    txt .= " " other.text
+            cat := TreasureCategoryFor(StrUpper(txt), true)
+        } else {
+            txt := ln.text
+            cat := TreasureCategoryFor(u, false)            ; only ! words count without the banner
         }
-        if !IsObject(hit)
-            continue
-        if (seen.Has(u) && A_TickCount - seen[u] < 180000)
-            continue
-        seen[u] := A_TickCount
-        TreasureFound(ln.text, hit)
+        if IsObject(cat)
+            hits.Push([txt, cat])
+    }
+    for h in hits {
+        k := h[2].key ":" StrUpper(h[1])
+        if (seen.Has(k) && A_TickCount - seen[k] < (h[2].key = "token" ? 1800000 : 180000))
+            continue                                        ; Pirate Shop Access screens stay up: count it once
+        seen[k] := A_TickCount
+        TreasureFound(Trim(h[1]), h[2])
+        break                                               ; one find per screen
     }
 }
 
@@ -4632,7 +4711,7 @@ OpenSettings(startPage := 1) {
     sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"],
                  ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"], ["🔗", "Share & tools"]]
     for i, sec in sections {
-        n := g.Add("Text", "x10 y" (78 + (i - 1) * 44) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
+        n := g.Add("Text", "x10 y" (78 + (i - 1) * 44) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " StrReplace(Tx(sec[2]), "&", "&&"))
         n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
         navs.Push(n)
     }
@@ -4703,6 +4782,8 @@ OpenSettings(startPage := 1) {
     ; ---- 3. Squad fill ----
     newPage(Tx("Squad fill"), Tx("Your teammates open chests and farm while you bot. Lobby Loop keeps you queued, moving and out of the way."))
     tick("SPECTATE_IDLE", "Stop moving while I'm spectating teammates", "y+16")
+    tick("WAIT_FOR_SQUAD", "Don't click Play Again while my teammates are still playing")
+    hint(Tx("Treasure your teammates find only counts if you're still in the match."))
     tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+8")
     hint(Tx("Turn on Settings > Treasure to get told when you get gizmos, treasure cosmetics or pirate tokens."), "y+16")
 
@@ -4731,13 +4812,16 @@ OpenSettings(startPage := 1) {
     newPage(Tx("Treasure"), Tx("Spots treasure on screen and tells you, with a screenshot or a clip."))
     tick("WATCH_TREASURE", "Watch for treasure", "y+14")
     add(UiText(g, "x" CX " y+14 w300 Section", Tx("What to look for"), "head"))
-    for item in [["TREASURE_GIZMO", "Sprite gizmos"], ["TREASURE_COSMETIC", "Weekly treasure cosmetics"], ["TREASURE_TOKEN", "Pirate tokens"]] {
-        c[item[1]] := addAll(UiCheck(g, "xs y+10", Tx(item[2]), S[item[1]], 270))
+    add(UiText(g, "xs y+10 w300", Tx("Prize banner (must be on screen)")))
+    c["TREASURE_FOUND_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_FOUND_WORDS"]))
+    for item in [["TREASURE_TOKEN", "Pirate Shop Access (pirate token)"], ["TREASURE_GIZMO", "Gizmos (Sprite Locator, Lucky Locator...)"],
+                 ["TREASURE_COSMETIC", "Weekly treasure cosmetics (and any other prize)"]] {
+        c[item[1]] := addAll(UiCheck(g, "xs y+10", Tx(item[2]), S[item[1]], 280))
         c[item[1] "_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S[item[1] "_WORDS"]))
     }
     add(UiText(g, "xs y+10 w300", Tx("My own words")))
     c["TREASURE_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_WORDS"]))
-    add(UiText(g, "xs y+4 w300", Tx("Words are separated by commas."), "muted"))
+    add(UiText(g, "xs y+4 w300", Tx("Separate words with commas. Start a word with ! to count it without the banner."), "muted"))
     add(UiText(g, "xs+" COL2 " ys w300", Tx("When I find treasure"), "head"))
     first := true
     for item in [["TREASURE_NOTIFY", "Windows notification"], ["TREASURE_BEEP", "Play a sound"], ["TREASURE_DISCORD", "Tell Discord"],
@@ -4754,10 +4838,10 @@ OpenSettings(startPage := 1) {
     c["CLIP_KEY"] := add(UiEdit(g, "xs+" COL2 " y+4 w145 r1", S["CLIP_KEY"]))
     c["CLIP_DELAY"] := add(UiEdit(g, "x+10 yp w145 r1", S["CLIP_DELAY"]))
     c["CLIP_UPLOAD"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Tx("Send the clip to Discord (if under 10 MB)"), S["CLIP_UPLOAD"], 270))
-    add(UiText(g, "x" CX " y+14 w" CW, Tx("Set your recorder's clip length to 25 seconds (Game Bar: 30)."), "muted"))
-    add(UiText(g, "x" CX " y+10 w" CW, Tx("Recent finds"), "head"))
-    add(UiText(g, "x" CX " y+4 w" CW " r3", RecentTreasureText(3), "muted"))
-    rb := add(UiButton(g, "x" CX " y+8 w250", "🔎 " Tx("Read the screen now")))
+    add(UiText(g, "xs+" COL2 " y+6 w300", Tx("Set your recorder's clip length to 25 seconds (Game Bar: 30)."), "muted"))
+    add(UiText(g, "x" CX " y474 w" CW, Tx("Recent finds"), "head"))
+    add(UiText(g, "x" CX " y+2 w" CW " r2", RecentTreasureText(2), "muted"))
+    rb := add(UiButton(g, "x" CX " y+6 w250", "🔎 " Tx("Read the screen now")))
     rb.OnEvent("Click", (*) => (g.Destroy(), ShowScreenText(4000)))
     tc := add(UiButton(g, "x+10 yp w200", "🎬 " Tx("Test the clip key")))
     tc.OnEvent("Click", (*) => SettingsTestClip(g, c))
@@ -4858,7 +4942,7 @@ OpenSettings(startPage := 1) {
     mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
 
     ; ---- 12. Share & tools ----
-    newPage(Tx("Share & tools"), Tx("Share your setup with friends, report bugs, install or remove."))
+    newPage(StrReplace(Tx("Share & tools"), "&", "&&"), Tx("Share your setup with friends, report bugs, install or remove."))
     say(Tx("Settings code (your profile, timers, movement and look. No names or Discord links):"), "y+18")
     c["CODE"] := add(UiEdit(g, "x" CX " y+4 w" CW " r2"))
     cb1 := add(UiButton(g, "x" CX " y+8 w300", "📋 " Tx("Copy my code")))
@@ -4994,7 +5078,7 @@ SaveSettingsGui(g, c) {
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
-                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
+                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
                 "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
@@ -5002,7 +5086,7 @@ SaveSettingsGui(g, c) {
             SetSetting(key, c[key].Value)
     for key, v in nums
         SetSetting(key, v)
-    for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS"]
+    for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS", "TREASURE_FOUND_WORDS"]
         SetSetting(key, Trim(c[key].Value))
     SetSetting("CLIP_KEY", clipKey)
     SetSetting("CLIP_METHOD", ["gamebar", "nvidia", "custom"][c["CLIP_METHOD"].Value])
