@@ -26,7 +26,9 @@ CHANGELOG := [
     "  + Treasure words update by themselves from GitHub (new weekly prize names)",
     "  + Stop after the match when you find Pirate Shop Access (or any treasure),",
     "    so the prize is safe. Then your stop action (sleep, shut down...)",
-    "  + Lobby proof: screenshots the UNLOCKED! treasure screen, then clicks Claim All",
+    "  + After each match it goes back to the lobby (prize banners and claim screens",
+    "    only show there), waits a few seconds for them, then readies up",
+    "  + Lobby proof: screenshots the prize / UNLOCKED! screen, then clicks Claim",
     "  + Known Fortnite popups (disconnected, server not responding, removed...)",
     "    are clicked by themselves, no teaching needed",
     "  + Counts how often you're kicked for being idle and warns you",
@@ -236,6 +238,8 @@ DEFAULTS := [
     ["TREASURE_ONLINE_VERSION", "", "Version of the online treasure words in use (set by itself)"],
     ["TREASURE_WORDS_URL", "", "Where to get the treasure words (blank = Lobby Loop's GitHub)"],
     ["TREASURE_STOP", "off", "Stop after the match when you find: off, token (Pirate Shop Access) or any"],
+    ["LOBBY_AFTER_MATCH", 1, "1 = after each match go back to the lobby instead of Play Again (prize screens only show in the lobby)"],
+    ["LOBBY_PRIZE_WAIT", 8, "Seconds to wait in the lobby for prize screens before readying up"],
     ["TREASURE_PROOF", 1, "1 = on the lobby UNLOCKED! treasure screen, save a screenshot, then click Claim All"],
     ["TREASURE_FOUND_WORDS", "YOU FOUND,TREASURE FOUND", "Fortnite's prize banner (top of the screen). Treasure only counts when this is on screen (blank = any line)"],
     ["TREASURE_NOTIFY", 1, "1 = Windows notification when treasure is found"],
@@ -447,6 +451,8 @@ stopAfterFind := ""    ; treasure found: stop when this match ends
 idleKicksRun := 0
 totalIdleKicks := Integer(IniRead(STATS_FILE, "Stats", "IdleKicks", 0))
 fpsWaiting := false    ; FPS saver waits for Lobby Loop to open Fortnite
+backToLobbyUntil := 0  ; just clicked Return to lobby: don't walk while the lobby loads
+prizeWaitUntil := 0    ; in the lobby: wait for prize screens until this time
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
@@ -456,7 +462,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
                "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "TREASURE_ONLINE",
-               "TREASURE_STOP", "TREASURE_PROOF", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
+               "TREASURE_STOP", "TREASURE_PROOF", "LOBBY_AFTER_MATCH", "LOBBY_PRIZE_WAIT", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
                "BATTERY_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
                "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
@@ -1717,6 +1723,11 @@ LoadTranslations() {
         "Check Fortnite's servers first (wait during outages)", "افحص خوادم Fortnite أولًا (انتظر أثناء الأعطال)",
         "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "اضغط على نوافذ Fortnite المعروفة تلقائيًا (انقطع الاتصال، الخادم لا يستجيب، تمت الإزالة...)",
         "Clips", "المقاطع",
+        "After each match, go back to the lobby (prize screens only show there)", "بعد كل مباراة، ارجع إلى الردهة (شاشات الجوائز تظهر هناك فقط)",
+        "Back to the lobby to check for prizes", "العودة إلى الردهة للبحث عن الجوائز",
+        "Checking for prize screens...", "جارٍ البحث عن شاشات الجوائز...",
+        "Loading the lobby...", "جارٍ تحميل الردهة...",
+        "Lobby Loop stops now that the prize is claimed.", "يتوقف Lobby Loop الآن بعد استلام الجائزة.",
         "Week {1} prizes", "جوائز الأسبوع {1}",
         "This week's prizes", "جوائز هذا الأسبوع",
         "Open Chest Tracker (fnchesttracker.com)", "فتح Chest Tracker ‏(fnchesttracker.com)",
@@ -4230,7 +4241,7 @@ DoSwap() {
 ; ============================================================
 MainLoop() {
     global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil
-    global lobbyVisit, modeChecked, modeRecheckTick
+    global lobbyVisit, modeChecked, modeRecheckTick, backToLobbyUntil, prizeWaitUntil
     if !running
         return
 
@@ -4321,6 +4332,14 @@ MainLoop() {
             StartStopAction()
             return
         }
+        if (S["LOBBY_AFTER_MATCH"] && S["WATCH_TREASURE"] && ReturnToLobbyClick()) {
+            lastClick["end"] := A_TickCount
+            gameState := "end"
+            backToLobbyUntil := A_TickCount + 45000
+            OnMatchEnd(gotCrops, shot)
+            SetStatus("🏠 " Tx("Back to the lobby to check for prizes"))
+            return
+        }
         if TryClick("end") {
             OnMatchEnd(gotCrops, shot)
             return
@@ -4334,6 +4353,13 @@ MainLoop() {
         if !lobbyVisit {                                ; just got to the lobby
             lobbyVisit := true
             modeChecked := false, modeRecheckTick := 0
+            prizeWaitUntil := S["WATCH_TREASURE"] ? A_TickCount + Max(0, Number(S["LOBBY_PRIZE_WAIT"])) * 1000 : 0
+        }
+        if (prizeWaitUntil && A_TickCount < prizeWaitUntil) {
+            SetStatus("🎁 " Tx("Checking for prize screens..."))
+            lastProgress := A_TickCount
+            SleepActive(500)
+            return
         }
         if (!modeChecked || (modeRecheckTick && A_TickCount >= modeRecheckTick)) {
             modeChecked := true
@@ -4359,6 +4385,13 @@ MainLoop() {
         return
     }
     lobbyVisit := false
+    if (backToLobbyUntil && A_TickCount < backToLobbyUntil) {      ; lobby / prize screens still loading
+        SetStatus("🏠 " Tx("Loading the lobby..."))
+        lastProgress := A_TickCount
+        SleepActive(500)
+        return
+    }
+    backToLobbyUntil := 0
 
     ; eliminated: stop moving while spectating teammates
     if (gameState = "spectating" && S["SPECTATE_IDLE"]) {
@@ -4476,14 +4509,14 @@ CheckTreasure(lines) {
         isBanner := !foundWords.Length
         if !isBanner
             for w in foundWords
-                if (InStr(u, w) && ln.y < H * 0.5) {        ; the prize banner is at the top of the screen
+                if InStr(u, w) {                                ; the prize banner (shows when you get back to the lobby)
                     isBanner := true
                     break
                 }
         if isBanner {
             txt := ln.text                                  ; add the lines right next to it (same banner)
             for other in lines
-                if (other != ln && Abs(other.y - ln.y) < Max(ln.h, 20) * 3 && other.y < H * 0.5
+                if (other != ln && Abs(other.y - ln.y) < Max(ln.h, 20) * 3
                     && Abs((other.x + other.w / 2) - (ln.x + ln.w / 2)) < W * 0.25 && !TreasureNoise(StrUpper(other.text)))
                     txt .= " " other.text
             cat := TreasureCategoryFor(StrUpper(txt), true)
@@ -4981,12 +5014,13 @@ OpenSettings(startPage := 1) {
     st.Choose(StrLower(S["TREASURE_STOP"]) = "token" ? 2 : StrLower(S["TREASURE_STOP"]) = "any" ? 3 : 1)
     c["TREASURE_STOP"] := st
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Then it does your stop action (Settings > Play)."), "muted"))
-    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("Lobby proof: screenshot the UNLOCKED! screen, then click Claim All"), S["TREASURE_PROOF"], 276))
-    uw := add(UiButton(g, "xs+" COL2 " y+14 w300", "🌐 " Tx("Update the words now")))
+    c["LOBBY_AFTER_MATCH"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("After each match, go back to the lobby (prize screens only show there)"), S["LOBBY_AFTER_MATCH"], 276))
+    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Tx("Lobby proof: screenshot the UNLOCKED! screen, then click Claim All"), S["TREASURE_PROOF"], 276))
+    uw := add(UiButton(g, "xs+" COL2 " y+10 w300", "🌐 " Tx("Update the words now")))
     uw.OnEvent("Click", (*) => SettingsUpdateWords(g))
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Online words: {1}", S["TREASURE_ONLINE_VERSION"] != "" ? S["TREASURE_ONLINE_VERSION"] : Tx("not downloaded yet")), "muted"))
-    add(UiText(g, "xs+" COL2 " y+14 w300", PrizeWeek() ? Tx("Week {1} prizes", PrizeWeek()) : Tx("This week's prizes"), "head"))
-    add(UiText(g, "xs+" COL2 " y+2 w300 r6", PrizesText(PrizeWeek()), "muted"))
+    add(UiText(g, "xs+" COL2 " y+10 w300", PrizeWeek() ? Tx("Week {1} prizes", PrizeWeek()) : Tx("This week's prizes"), "head"))
+    add(UiText(g, "xs+" COL2 " y+2 w300 r5", PrizesText(PrizeWeek()), "muted"))
     ws := add(UiButton(g, "xs+" COL2 " y+4 w300", "🌐 " Tx("Open Chest Tracker (fnchesttracker.com)")))
     ws.OnEvent("Click", (*) => Run("https://fnchesttracker.com/tracker"))
 
@@ -5256,7 +5290,7 @@ SaveSettingsGui(g, c) {
     SetSetting("START_AT_TIME", startT)
     SetSetting("DAILY_SUMMARY_TIME", sumT)
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
-                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF",
+                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF", "LOBBY_AFTER_MATCH",
                 "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
                 "KEEP_AWAKE", "STREAM_HIDE",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
@@ -5439,9 +5473,16 @@ TreasureStopCheck(text, cat) {
     if (rule = "token" && (!IsObject(cat) || cat.key != "token"))
         return
     stopAfterFind := text
-    Log("Will stop after this match (found: " text ")")
-    Notify("🏴‍☠️ " Tx("Found it!"), Tx("Lobby Loop stops after this match ends, so the prize is safe."))
-    Discord("🏴‍☠️ Found **" text "**. Lobby Loop stops after this match ends (it won't leave early).")
+    if (gameState = "match" || gameState = "spectating") {
+        Log("Will stop after this match (found: " text ")")
+        Notify("🏴‍☠️ " Tx("Found it!"), Tx("Lobby Loop stops after this match ends, so the prize is safe."))
+        Discord("🏴‍☠️ Found **" text "**. Lobby Loop stops after this match ends (it won't leave early).")
+    } else {
+        Log("Found in the lobby: stopping after the claim (" text ")")
+        Notify("🏴‍☠️ " Tx("Found it!"), Tx("Lobby Loop stops now that the prize is claimed."))
+        Discord("🏴‍☠️ Found **" text "**. Stopping after it's claimed.")
+        SetTimer(() => StopIfFound("lobby"), -7000)      ; gives the lobby proof time to screenshot and claim
+    }
 }
 
 ; Called where Play Again would be clicked, and in the lobby. Returns true if it stopped.
@@ -5451,6 +5492,8 @@ StopIfFound(where) {
         return false
     found := stopAfterFind
     stopAfterFind := ""
+    if !running                                         ; already stopped: don't start it again
+        return false
     ToggleRun("found " found)
     SetStatus("🏴‍☠️ " Tx("Stopped: found {1}", found))
     StartStopAction()
@@ -5464,7 +5507,14 @@ StopIfFound(where) {
 LobbyProof(lines, joined) {
     global lastClaimTick, clicks
     static lastProof := 0
-    if (!S["TREASURE_PROOF"] || A_TickCount - lastProof < 20000 || !InStr(joined, "UNLOCKED"))
+    if (!S["TREASURE_PROOF"] || A_TickCount - lastProof < 20000)
+        return false
+    prizeScreen := InStr(joined, "UNLOCKED")
+    if !prizeScreen
+        for w in WordList(S["TREASURE_FOUND_WORDS"])
+            if InStr(joined, w)
+                prizeScreen := true
+    if !prizeScreen
         return false
     isTreasure := InStr(joined, "PIRATE SHOP ACCESS")
     if !isTreasure
@@ -5781,4 +5831,52 @@ MarkPrize(text) {
     hit.got := got, hit.total := total
     Log("Weekly prize found: " hit.name " (week " hit.week ", " got "/" total ")")
     return hit
+}
+
+; ============================================================
+; v7.7: Return to lobby instead of Play Again (prize banners and claim screens only show in the lobby)
+; ============================================================
+ReturnToLobbyClick() {
+    global clicks
+    labels := ["RETURN TO LOBBY", "BACK TO LOBBY", "LEAVE MATCH", "RETURN TO THE LOBBY"]
+    confirms := ["CONFIRM", "YES", "LEAVE", "LEAVE MATCH", "RETURN TO LOBBY"]
+    clickLine(ln) {
+        global clicks
+        ReleaseAll()
+        MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+        Sleep(180)
+        Click()
+        clicks += 1
+    }
+    findLine(words) {
+        for ln in OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight) {
+            u := Trim(StrUpper(ln.text))
+            for w in words
+                if (u = w)
+                    return ln
+        }
+        return ""
+    }
+    ln := findLine(labels)
+    viaMenu := false
+    if !IsObject(ln) {                                  ; not on the end screen: try the Esc menu
+        Send("{Esc}")
+        Sleep(1300)
+        ln := findLine(labels)
+        viaMenu := true
+    }
+    if !IsObject(ln) {
+        if viaMenu
+            Send("{Esc}")                               ; close the menu again, Play Again it is
+        Log("Return to lobby: button not found, using Play Again")
+        return false
+    }
+    clickLine(ln)
+    Log("Clicked '" ln.text "'" (viaMenu ? " (Esc menu)" : ""))
+    Sleep(1300)
+    if IsObject(ok := findLine(confirms)) {             ; "Are you sure?"
+        clickLine(ok)
+        Log("Confirmed '" ok.text "'")
+    }
+    return true
 }
