@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.5.0
+;@Ahk2Exe-SetVersion 7.6.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.5"
+VERSION := "7.6"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,24 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.6  (18 Nov 2026)",
+    "  Lobby Loop is made for AFKing in squad fills: your teammates carry and farm",
+    "  for you while you're away.",
+    "  + Settings > Mode: pick Solo / Duo / Trio / Squad, Build / Zero Build and",
+    "    Fill / No fill. It checks the lobby before readying up (and can try to switch)",
+    "  + Settings > Squad fill: let teammates pick the drop, hide mode, Stay with team,",
+    "    team chat message at the start, gg when eliminated",
+    "  + Settings > Treasure (its own section): gizmos, weekly treasure cosmetics and",
+    "    pirate tokens with their own words, a sound, and a clip of the 20 seconds",
+    "    before + 5 seconds after (Game Bar, NVIDIA or your own clip key)",
+    "  + Clips go to Discord by themselves when they're under 10 MB",
+    "  + Read the screen now: shows what Lobby Loop sees, to tune the words",
+    "  + 10 more extras: keep the PC awake, stop after X matches, human-like breaks,",
+    "    random wait before Ready, Fortnite volume, hide the status box from streams,",
+    "    and the squad-fill ones above",
+    "  + Bigger Settings window with 12 sections",
+    "  + New phone commands: !mode !clip !read !chat !break",
+    "",
     "v7.5  (18 Nov 2026)",
     "  + Screen reader: knows when you're spectating and stops moving",
     "  + Treasure watcher: spots Sprite gizmos, pirate tokens and other treasure,",
@@ -187,7 +205,46 @@ DEFAULTS := [
     ["OVERLAY_STYLE", "card", "Status box style: card or mini"],
     ["ACCENT", "yellow", "Accent colour: yellow, purple, cyan, pink or green"],
     ["WATCH_TREASURE", 1, "1 = watch the screen for treasure (gizmos, pirate tokens...)"],
-    ["TREASURE_WORDS", "GIZMO,PIRATE TOKEN,TREASURE FOUND,TREASURE UNLOCKED,NEW SPRITE,SPRITE UNLOCKED", "Words that mean you got treasure, separated by commas"],
+    ["TREASURE_WORDS", "", "Your own extra treasure words, separated by commas"],
+    ["TREASURE_GIZMO", 1, "1 = look for Sprite gizmos"],
+    ["TREASURE_GIZMO_WORDS", "GIZMO,NEW SPRITE,SPRITE UNLOCKED", "Words for Sprite gizmos"],
+    ["TREASURE_COSMETIC", 1, "1 = look for the weekly treasure cosmetics"],
+    ["TREASURE_COSMETIC_WORDS", "WEEKLY TREASURE,TREASURE UNLOCKED,TREASURE FOUND,NEW COSMETIC", "Words for weekly treasure cosmetics"],
+    ["TREASURE_TOKEN", 1, "1 = look for pirate tokens"],
+    ["TREASURE_TOKEN_WORDS", "PIRATE TOKEN,DOUBLOON", "Words for pirate tokens"],
+    ["TREASURE_NOTIFY", 1, "1 = Windows notification when treasure is found"],
+    ["TREASURE_BEEP", 1, "1 = play a sound when treasure is found"],
+    ["TREASURE_DISCORD", 1, "1 = tell Discord when treasure is found"],
+    ["TREASURE_SCREENSHOT", 1, "1 = add a screenshot to the Discord message"],
+    ["TREASURE_CLIP", 0, "1 = save a clip when treasure is found (set your recorder's clip length to 25 s)"],
+    ["CLIP_METHOD", "gamebar", "Clip with: gamebar (Win+Alt+G), nvidia (Alt+F10) or custom (CLIP_KEY)"],
+    ["CLIP_KEY", "", "Your recorder's clip key when CLIP_METHOD is custom, e.g. F9 or ^!c"],
+    ["CLIP_DELAY", 5, "Seconds to wait after the treasure before saving the clip"],
+    ["CLIP_FOLDER", "", "Where your recorder saves clips (blank = your Videos folder)"],
+    ["CLIP_UPLOAD", 1, "1 = send the clip to Discord when it's under 10 MB"],
+    ["MODE_TEAM", "any", "Team size: any, solo, duo, trio or squad"],
+    ["MODE_BUILD", "any", "Build: any, build or zerobuild"],
+    ["MODE_FILL", "any", "Fill: any, fill or nofill"],
+    ["MODE_ACTION", "wait", "If the lobby is on the wrong mode: wait (and tell you) or ready (ready up anyway)"],
+    ["MODE_SWITCH", 0, "1 = try to switch to your mode by itself (experimental)"],
+    ["FOLLOW_DROP", 1, "1 = don't jump off the bus yourself, let your teammates pick the drop"],
+    ["FOLLOW_DROP_MIN", 4, "...for this many minutes after Ready / Play Again"],
+    ["HIDE_MODE", 0, "1 = after landing, mostly stand still to stay alive longer"],
+    ["HIDE_AFTER_MIN", 5, "...starting this many minutes after Ready / Play Again"],
+    ["STAY_WITH_TEAM", 0, "1 = click Stay with team instead of Play Again"],
+    ["CHAT_START", 0, "1 = send a chat message to your team at the start of each match"],
+    ["CHAT_START_TEXT", "AFK for a bit, good luck!", "The start-of-match message"],
+    ["CHAT_DELAY", 75, "Seconds after Ready / Play Again to send the start message"],
+    ["CHAT_GG", 0, "1 = send a message when you're eliminated"],
+    ["CHAT_GG_TEXT", "gg", "The eliminated message"],
+    ["KEEP_AWAKE", 1, "1 = keep the PC from sleeping while running"],
+    ["MATCH_LIMIT", 0, "Stop after this many matches (0 = no limit)"],
+    ["BREAKS", 0, "1 = take human-like breaks in the lobby"],
+    ["BREAK_EVERY_MIN", 90, "Take a break about every this many minutes"],
+    ["BREAK_MIN", 10, "Breaks last about this many minutes"],
+    ["READY_DELAY_MAX", 3, "Wait a random 1 to this many seconds before clicking Ready (0 = off)"],
+    ["GAME_VOLUME", 100, "Fortnite volume while running, 0-100 (100 = leave it alone)"],
+    ["STREAM_HIDE", 0, "1 = hide the status box from OBS, streams and screenshots"],
     ["AUTO_CLAIM", 1, "1 = click buttons that just say Continue, Collect, Claim, Accept..."],
     ["SPECTATE_IDLE", 1, "1 = stop moving while you're spectating teammates"],
     ["SCREEN_READER_SECONDS", 10, "How often the screen reader looks at the screen, in seconds"],
@@ -221,6 +278,7 @@ DEFAULTS := [
     ["KEY_SPRINT", "LShift", "Your Fortnite sprint key"],
     ["KEY_CROUCH", "LCtrl", "Your Fortnite crouch key"],
     ["KEY_SLOTS", "1,2,3,4,5", "Your weapon slot keys, separated by commas"],
+    ["KEY_CHAT", "Enter", "Your Fortnite chat key"],
     ["WALK_MIN", 500, "Shortest walk, ms (1000 = 1 second)"],
     ["WALK_MAX", 2200, "Longest walk, ms"],
     ["COMBO_CHANCE", 35, "% chance to walk diagonally"],
@@ -348,13 +406,28 @@ lastOcrTick := 0
 lastClaimTick := 0
 dashOpenTick := 0
 scriptStartTick := A_TickCount
+matchStartTick := 0    ; when the current match started (Ready / Play Again clicked)
+chatDueTick := 0       ; when to send the start-of-match chat message
+readyAtTick := 0       ; random wait before clicking Ready
+lobbyVisit := false    ; true while the lobby button is on screen
+modeChecked := false
+modeRecheckTick := 0
+modeWarned := false
+breakNextTick := 0
+breakUntilTick := 0
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
                "BLACKOUT_ON_START", "READ_RESULTS", "WATCH_TREASURE", "TREASURE_WORDS", "AUTO_CLAIM", "SPECTATE_IDLE",
                "WALK_MIN", "WALK_MAX", "COMBO_CHANCE", "SPRINT_CHANCE", "JUMP_CHANCE", "DIVE_CHANCE", "DIVE_MIN", "DIVE_MAX",
                "SLIDE_CHANCE", "CROUCH_CHANCE", "STRAFE_CHANCE", "SWAP_CHANCE", "LOOK_CHANCE", "IDLE_CHANCE", "IDLE_MIN",
-               "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES"]
+               "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
+               "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
+               "TREASURE_TOKEN_WORDS", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
+               "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
+               "MODE_ACTION", "MODE_SWITCH", "FOLLOW_DROP", "FOLLOW_DROP_MIN", "HIDE_MODE", "HIDE_AFTER_MIN",
+               "STAY_WITH_TEAM", "CHAT_GG", "KEEP_AWAKE", "MATCH_LIMIT", "BREAKS", "BREAK_EVERY_MIN", "BREAK_MIN",
+               "READY_DELAY_MAX", "GAME_VOLUME"]
 CheckSafeMode()
 OnExit(OnExitHandler)
 OnError(OnErrorHandler)
@@ -377,7 +450,8 @@ HOTKEY_FIELDS := [["HOTKEY_TOGGLE", "Start / Stop"], ["HOTKEY_SETTINGS", "Settin
                   ["HOTKEY_BLACKOUT", "Dim screen"], ["HOTKEY_OVERLAY", "Show / hide status box"],
                   ["HOTKEY_TEACH", "Teach a popup button"], ["HOTKEY_EXIT", "Exit"]]
 GAMEKEY_FIELDS := [["KEY_FORWARD", "Forward"], ["KEY_LEFT", "Left"], ["KEY_BACK", "Back"], ["KEY_RIGHT", "Right"],
-                   ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"], ["KEY_SLOTS", "Weapon slots"]]
+                   ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"], ["KEY_SLOTS", "Weapon slots"],
+                   ["KEY_CHAT", "Chat"]]
 
 ; ---------- Button detection ----------
 SCALE := Min(A_ScreenWidth / 2560, A_ScreenHeight / 1440)   ; works for 16:9, 16:10 and 21:9
@@ -418,6 +492,8 @@ toolsMenu.Add(Tx("Open history (Excel)"), (*) => OpenHistory())
 toolsMenu.Add(Tx("Send screenshot to Discord"), (*) => SendScreenshot("Screenshot from " PlayerName()))
 toolsMenu.Add(Tx("Send log to Discord"), (*) => SendLog())
 toolsMenu.Add(Tx("Report a bug"), (*) => ReportBug())
+toolsMenu.Add(Tx("Read the screen now"), (*) => ShowScreenText(3000))
+toolsMenu.Add(Tx("Check the lobby mode now"), (*) => ShowModeCheck(3000))
 toolsMenu.Add()
 toolsMenu.Add(Tx("Keyboard shortcuts"), (*) => ShowShortcuts())
 toolsMenu.Add(Tx("Setup wizard"), (*) => StartWizard())
@@ -537,7 +613,8 @@ ValidKey(keyName) {
 }
 
 ToggleRun(reason := "you") {
-    global gameState
+    global gameState, matchStartTick, chatDueTick, readyAtTick, lobbyVisit, modeChecked, modeRecheckTick, modeWarned
+    global breakNextTick, breakUntilTick
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
     global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries
     autoStartArmed := false
@@ -572,6 +649,13 @@ ToggleRun(reason := "you") {
             SoundBeep(1000, 120)
         if S["MUTE_WHILE_RUNNING"]
             SetGameMute(true)
+        else if (Number(S["GAME_VOLUME"]) < 100)
+            SetGameVolume(Number(S["GAME_VOLUME"]))
+        if S["KEEP_AWAKE"]
+            KeepAwake(true)
+        matchStartTick := 0, chatDueTick := 0, readyAtTick := 0, lobbyVisit := false
+        modeChecked := false, modeRecheckTick := 0, modeWarned := false
+        breakNextTick := 0, breakUntilTick := 0
         if S["BLACKOUT_ON_START"]
             ToggleBlackout(true)
         gameState := ""
@@ -583,6 +667,9 @@ ToggleRun(reason := "you") {
         ReleaseAll()
         if S["MUTE_WHILE_RUNNING"]
             SetGameMute(false)
+        else if (Number(S["GAME_VOLUME"]) < 100)
+            SetGameVolume(100)
+        KeepAwake(false)
         ToggleBlackout(false)
         runMs := A_TickCount - sessionStart
         totalMinutes += runMs / 60000
@@ -843,210 +930,6 @@ ShowGuide(kind, owner := "") {
 ; ============================================================
 ; Settings window: sidebar with sections
 ; ============================================================
-OpenSettings(startPage := 1) {
-    g := ThemeGui(TITLE " - " Tx("Settings"))
-    c := Map()
-    pages := []
-    navs := []
-    CW := 470                                         ; content width
-    CX := 230                                         ; content left edge
-
-    ; sidebar
-    g.Add("Text", "x0 y0 w200 h560 Background" UiCol("side"))
-    UiText(g, "x20 y20 w170", "🔁 " TITLE, "head", UiCol("side"))
-    UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
-    sections := [["🎮", "Play"], ["⏰", "Schedule"], ["✨", "Extras"], ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"],
-                 ["📱", "Phone control"], ["🎨", "Look"], ["🔗", "Share & tools"]]
-    for i, sec in sections {
-        n := g.Add("Text", "x10 y" (86 + (i - 1) * 42) " w180 h36 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
-        n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
-        navs.Push(n)
-    }
-
-    ; helpers that add controls to the newest page
-    add(ctrl) => (pages[pages.Length].Push(ctrl), ctrl)
-    addAll(arr) {
-        for x in arr
-            pages[pages.Length].Push(x)
-        return arr[1]
-    }
-    newPage(title, sub := "") {
-        pages.Push([])
-        add(UiText(g, "x" CX " y22 w" CW, title, "title"))
-        if (sub != "")
-            add(UiText(g, "x" CX " y+2 w" CW, sub, "muted"))
-    }
-
-    ; ---- 1. Play ----
-    newPage(Tx("Play"), Tx("How long it runs and what happens after."))
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("Profile")))
-    c["PROFILE"] := add(UiDDL(g, "x" CX " y+4 w" CW, [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")]))
-    c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Stop after a time, or at a clock time:")))
-    c["STOP"] := add(UiEdit(g, "x" CX " y+4 w" CW, CurrentStopText()))
-    add(UiText(g, "x" CX " y+3 w" CW, Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"), "muted"))
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("When it stops:")))
-    c["ACTION"] := add(UiDDL(g, "x" CX " y+4 w" CW, ActionLabels()))
-    c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
-    add(UiText(g, "x" CX " y+3 w" CW, Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE), "muted"))
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Your name (for Discord and the leaderboard):")))
-    c["PLAYER_NAME"] := add(UiEdit(g, "x" CX " y+4 w" CW, PlayerName()))
-
-    ; ---- 2. Schedule ----
-    newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows."))
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("Start every day at:")))
-    c["START"] := add(UiEdit(g, "x" CX " y+4 w200", ClockText(S["START_AT_TIME"])))
-    add(UiText(g, "x" CX " y+3 w" CW, Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"), "muted"))
-    first := true
-    for pair in [["AUTO_START", "Start by itself when I click into Fortnite"], ["LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)"],
-                 ["START_WITH_WINDOWS", "Start with Windows"]] {
-        c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+18" : " y+10"), Tx(pair[2]), S[pair[1]], CW - 30))
-        first := false
-    }
-
-    ; ---- 3. Extras ----
-    newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
-    first := true
-    for pair in [["MUTE_WHILE_RUNNING", "Mute Fortnite while running"], ["BLACKOUT_ON_START", "Dim the screen while running"],
-                 ["READ_RESULTS", "Read my placement and XP after each match"], ["NOTIFY", "Windows notifications (stopped, stuck, crashed)"],
-                 ["SPECTATE_IDLE", "Stop moving while I'm spectating teammates"], ["AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)"],
-                 ["WATCH_TREASURE", "Watch for treasure (gizmos, pirate tokens...)"]] {
-        c[pair[1]] := addAll(UiCheck(g, "x" CX (first ? " y+16" : " y+8"), Tx(pair[2]), S[pair[1]], CW - 30))
-        first := false
-    }
-    add(UiText(g, "x" CX " y+14 w" CW, Tx("Treasure words (separated by commas):")))
-    c["TREASURE_WORDS"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["TREASURE_WORDS"]))
-
-    ; ---- 4. Hotkeys ----
-    newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
-    add(UiText(g, "x" CX " y+16 w220 Section", Tx("Lobby Loop keys"), "head"))
-    for i, pair in HOTKEY_FIELDS {
-        add(UiText(g, "xs y+" (i = 1 ? 10 : 8) " w135", Tx(pair[2])))
-        c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w80 r1", S[pair[1]]))
-    }
-    add(UiText(g, "xs+245 ys w220", Tx("Your Fortnite keys"), "head"))
-    for i, pair in GAMEKEY_FIELDS {
-        add(UiText(g, "xs+245 y+" (i = 1 ? 10 : 8) " w110", Tx(pair[2])))
-        c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w105 r1", S[pair[1]]))
-    }
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Examples: F8, Insert, Numpad0, ^!s (Ctrl+Alt+S), +F8 (Shift+F8). Lobby Loop restarts after you save."), "muted"))
-
-    ; ---- 5. Popups ----
-    newPage(Tx("Popups"), Tx("Buttons you taught with {1}. They're clicked whenever they show up.", HK_TEACH))
-    if !POPUPS.Length
-        add(UiText(g, "x" CX " y+18 w" CW, Tx("No popup buttons learned yet."), "muted"))
-    for i, p in POPUPS {
-        pw := Round((p.r - p.l) * A_ScreenWidth), ph := Round((p.b - p.t) * A_ScreenHeight)
-        add(g.Add("Text", "x" CX " y+" (i = 1 ? 18 : 10) " w22 h22 Background" Format("{:06X}", p.color)))
-        add(UiText(g, "x+10 yp+2 w250", "#" i "   " pw " x " ph " px   (" Round(p.l * 100) "%, " Round(p.t * 100) "%)"))
-        fb := add(UiButton(g, "x+10 yp-4 w140", "🗑 " Tx("Forget")))
-        fb.OnEvent("Click", SettingsForgetPopup.Bind(i, g))
-    }
-    if POPUPS.Length {
-        fa := add(UiButton(g, "x" CX " y+18 w200", Tx("Forget all")))
-        fa.OnEvent("Click", (*) => (ForgetPopups(), g.Destroy(), OpenSettings(5)))
-    }
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("To teach one: hover over an empty part of the popup's button and press {1}. To forget the one under the mouse: Shift+{1}.", HK_TEACH), "muted"))
-
-    ; ---- 6. Discord alerts ----
-    newPage(Tx("Discord alerts"), Tx("Messages, screenshots and a daily summary in your channel."))
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("Discord alert link (optional):")))
-    c["HOOK"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", DiscordUrl()))
-    tb := add(UiButton(g, "x" CX " y+10 w190", Tx("Send test message")))
-    tb.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
-    hb := add(UiButton(g, "x+10 yp w190", "❓ " Tx("How do I get this?")))
-    hb.OnEvent("Click", (*) => ShowGuide("webhook", g.Hwnd))
-    c["SCREENSHOT_EVERY_MATCH"] := addAll(UiCheck(g, "x" CX " y+18", Tx("Screenshot to Discord after every match"), S["SCREENSHOT_EVERY_MATCH"], CW - 30))
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Daily Discord summary at (blank = off):")))
-    c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200", ClockText(S["DAILY_SUMMARY_TIME"])))
-    c["LIVE_STATUS"] := addAll(UiCheck(g, "x" CX " y+14", Tx("Live status message (shows when the PC went offline)"), S["LIVE_STATUS"], CW - 30))
-    add(UiText(g, "x" CX " y+12 w" CW, Tx("Screenshot to Discord every (minutes, 0 = off):")))
-    c["AUTO_SCREENSHOT_MIN"] := add(UiEdit(g, "x" CX " y+4 w120 r1", S["AUTO_SCREENSHOT_MIN"]))
-
-    ; ---- 7. Phone control ----
-    newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
-    hb2 := add(UiButton(g, "x" CX " y+14 w240", "❓ " Tx("How do I set this up?")))
-    hb2.OnEvent("Click", (*) => ShowGuide("bot", g.Hwnd))
-    add(UiText(g, "x" CX " y+16 w" CW, Tx("Bot token")))
-    c["TOKEN"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1 Password", S["DISCORD_BOT_TOKEN"]))
-    add(UiText(g, "x" CX " y+12 w" CW, Tx("Channel ID")))
-    c["CHANNEL"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_CHANNEL_ID"]))
-    add(UiText(g, "x" CX " y+12 w" CW, Tx("Your Discord user ID (only you can control it)")))
-    c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
-    pb := add(UiButton(g, "x" CX " y+12 w240", "🎛️ " Tx("Post the control panel")))
-    pb.OnEvent("Click", (*) => ShowTip(PanelCreate() ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500))
-    add(UiText(g, "x" CX " y+10 w" CW, Tx("Type !help in your channel to see all 30+ commands."), "muted"))
-
-    ; ---- 8. Look ----
-    newPage(Tx("Look"), Tx("Language, theme and the status box."))
-    add(UiText(g, "x" CX " y+18 w220 Section", Tx("Language")))
-    c["LANG"] := add(UiDDL(g, "xs y+4 w220", ["English", "العربية"]))
-    c["LANG"].Choose(IsArabic() ? 2 : 1)
-    add(UiText(g, "xs+245 ys w220", Tx("Theme")))
-    c["THEME"] := add(UiDDL(g, "xs+245 y+4 w220", [Tx("Dark"), Tx("Light")]))
-    c["THEME"].Choose(DarkOn() ? 1 : 2)
-
-    add(UiText(g, "xs y+16 w220 Section", Tx("Accent colour")))
-    accents := ["yellow", "purple", "cyan", "pink", "green"]
-    c["ACCENT"] := add(UiDDL(g, "xs y+4 w220", [Tx("Yellow"), Tx("Purple"), Tx("Cyan"), Tx("Pink"), Tx("Green")]))
-    ai := 1
-    for i, k in accents
-        if (k = StrLower(S["ACCENT"]))
-            ai := i
-    c["ACCENT"].Choose(ai)
-    add(UiText(g, "xs+245 ys w220", Tx("Status box style")))
-    c["STYLE"] := add(UiDDL(g, "xs+245 y+4 w220", [Tx("Card"), Tx("Mini")]))
-    c["STYLE"].Choose(StrLower(S["OVERLAY_STYLE"]) = "mini" ? 2 : 1)
-
-    add(UiText(g, "xs y+16 w220 Section", Tx("Status box corner")))
-    corners := ["top-left", "top-right", "bottom-left", "bottom-right", "custom"]
-    c["CORNER"] := add(UiDDL(g, "xs y+4 w220", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right"), Tx("Where I dragged it")]))
-    ci := 1
-    for i, k in corners
-        if (k = StrLower(S["OVERLAY_CORNER"]))
-            ci := i
-    c["CORNER"].Choose(ci)
-    add(UiText(g, "xs+245 ys w220", Tx("Status box size")))
-    sizes := ["small", "normal", "large"]
-    c["SIZE"] := add(UiDDL(g, "xs+245 y+4 w220", [Tx("Small"), Tx("Normal"), Tx("Large")]))
-    si := 2
-    for i, k in sizes
-        if (k = StrLower(S["OVERLAY_SIZE"]))
-            si := i
-    c["SIZE"].Choose(si)
-    mv := add(UiButton(g, "xs y+18 w220", "✋ " Tx("Move status box")))
-    mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
-
-    ; ---- 9. Share & tools ----
-    newPage(Tx("Share & tools"), Tx("Share your setup with friends, report bugs, install or remove."))
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("Settings code (your profile, timers, movement and look. No names or Discord links):")))
-    c["CODE"] := add(UiEdit(g, "x" CX " y+4 w" CW " r2"))
-    cb1 := add(UiButton(g, "x" CX " y+8 w225", "📋 " Tx("Copy my code")))
-    cb1.OnEvent("Click", (*) => (c["CODE"].Value := ExportCode(), ShowTip(Tx("Copied. Send it to a friend."), 2500)))
-    cb2 := add(UiButton(g, "x+10 yp w225", "📥 " Tx("Use the pasted code")))
-    cb2.OnEvent("Click", (*) => SettingsImportCode(g, c["CODE"].Value))
-    add(UiText(g, "x" CX " y+22 w" CW, Tx("Tools"), "head"))
-    t1 := add(UiButton(g, "x" CX " y+8 w225", "🐞 " Tx("Report a bug")))
-    t1.OnEvent("Click", (*) => ReportBug())
-    t2 := add(UiButton(g, "x+10 yp w225", "📌 " Tx("Add shortcuts")))
-    t2.OnEvent("Click", (*) => InstallShortcuts())
-    t3 := add(UiButton(g, "x" CX " y+8 w225", "📊 " Tx("Stats dashboard")))
-    t3.OnEvent("Click", (*) => OpenDashboard())
-    t4 := add(UiButton(g, "x+10 yp w225", "🗑️ " Tx("Uninstall")))
-    t4.OnEvent("Click", (*) => (g.Destroy(), Uninstall()))
-
-    ; ---- bottom bar ----
-    g.Add("Text", "x" CX " y492 w" CW " h1 Background" UiCol("line"))
-    saveBtn := UiButton(g, "x" (CX + CW - 230) " y506 w110 Default", Tx("Save"))
-    saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
-    cancelBtn := UiButton(g, "x+10 yp w110", Tx("Cancel"))
-    cancelBtn.OnEvent("Click", (*) => g.Destroy())
-    g.OnEvent("Escape", (*) => g.Destroy())
-
-    SettingsNav(Min(Max(1, startPage), pages.Length), pages, navs)
-    g.Show("w" (CX + CW + 30) " h556")
-}
-
 SettingsNav(index, pages, navs, *) {
     for i, pg in pages
         for ctrl in pg
@@ -1061,7 +944,7 @@ SettingsNav(index, pages, navs, *) {
 SettingsForgetPopup(index, g, *) {
     ForgetPopup(index)
     g.Destroy()
-    OpenSettings(5)
+    OpenSettings(8)
 }
 
 SettingsImportCode(g, code) {
@@ -1080,126 +963,6 @@ ProfileIndex(key) {
         if (k = key)
             return i
     return 4
-}
-
-SaveSettingsGui(g, c) {
-    global botLastId, botFails, watchMinutes
-    bad(msg) => MsgBox(msg, TITLE, "Icon! Owner" g.Hwnd)
-    ; stop timer
-    str := Trim(c["STOP"].Value)
-    stopH := 0, stopM := 0, stopT := ""
-    if (str != "") {
-        if (ck := ParseClock(str))
-            stopT := Format("{:02}:{:02}", ck.h, ck.m)
-        else if (dur := ParseDuration(str))
-            stopH := dur.h, stopM := dur.m
-        else
-            return bad("Couldn't understand the stop time '" str "'.`n`nTry: 2h, 90m, 1h30m, 9:30 PM or 21:30")
-    }
-    ; start time and daily summary time
-    startT := "", sumT := ""
-    if (Trim(c["START"].Value) != "") {
-        if !(ck2 := ParseClock(Trim(c["START"].Value)))
-            return bad("Couldn't understand the start time.`n`nTry: 2:00 AM or 14:30")
-        startT := Format("{:02}:{:02}", ck2.h, ck2.m)
-    }
-    if (Trim(c["SUMMARY"].Value) != "") {
-        if !(ck3 := ParseClock(Trim(c["SUMMARY"].Value)))
-            return bad("Couldn't understand the summary time.`n`nTry: 11:55 PM or 23:55")
-        sumT := Format("{:02}:{:02}", ck3.h, ck3.m)
-    }
-    hook := Trim(c["HOOK"].Value)
-    if (hook != "" && !IsDiscordUrl(hook))
-        return bad("That doesn't look like a Discord webhook link.`nIt should start with https://discord.com/api/webhooks/")
-    ; hotkeys and game keys
-    keysChanged := false
-    seenHk := Map()
-    for pair in HOTKEY_FIELDS {
-        v := Trim(c[pair[1]].Value)
-        if !ValidHotkey(v)
-            return bad("'" v "' can't be used as the " Tx(pair[2]) " key.`n`nExamples: F8, Insert, Numpad0, ^!s, +F8")
-        if seenHk.Has(StrLower(v))
-            return bad("'" v "' is used for two Lobby Loop keys. Pick a different key for one of them.")
-        seenHk[StrLower(v)] := true
-    }
-    for pair in GAMEKEY_FIELDS {
-        v := Trim(c[pair[1]].Value)
-        if (pair[1] = "KEY_SLOTS") {
-            for slot in StrSplit(v, ",", " `t")
-                if !ValidKey(slot)
-                    return bad("'" slot "' isn't a key name (weapon slots look like: 1,2,3,4,5).")
-        } else if !ValidKey(v) {
-            return bad("'" v "' isn't a key name AutoHotkey knows (examples: w, Space, LShift, LCtrl).")
-        }
-    }
-    autoMin := Trim(c["AUTO_SCREENSHOT_MIN"].Value)
-    if (autoMin = "")
-        autoMin := 0
-    if !IsNumber(autoMin)
-        return bad("'Screenshot every' should be a number of minutes (0 = off).")
-    channel := Trim(c["CHANNEL"].Value)
-    if (channel != "" && !RegExMatch(channel, "^\d{15,22}$"))
-        return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
-
-    ; profile first, then the values typed on this window win
-    newProfile := PROFILE_KEYS[c["PROFILE"].Value]
-    if (newProfile != S["PROFILE"])
-        ApplyProfile(newProfile)
-    if (hook != "" && hook != DiscordUrl())
-        SetupWebhook(hook)
-    SaveStop(stopH, stopM, stopT)
-    SetSetting("STOP_ACTION", ACTIONS[c["ACTION"].Value][1])
-    SetSetting("START_AT_TIME", startT)
-    SetSetting("DAILY_SUMMARY_TIME", sumT)
-    for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS", "SCREENSHOT_EVERY_MATCH", "NOTIFY",
-                "SPECTATE_IDLE", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS"]
-        SetSetting(key, c[key].Value)
-    if (c["START_WITH_WINDOWS"].Value != (S["START_WITH_WINDOWS"] ? 1 : 0))
-        SetStartWithWindows(c["START_WITH_WINDOWS"].Value)
-    SetSetting("START_WITH_WINDOWS", c["START_WITH_WINDOWS"].Value)
-    SetSetting("PLAYER_NAME", Trim(c["PLAYER_NAME"].Value))
-    SetSetting("DISCORD_WEBHOOK", hook)
-    SetSetting("DISCORD_BOT_TOKEN", Trim(c["TOKEN"].Value))
-    SetSetting("DISCORD_CHANNEL_ID", channel)
-    SetSetting("DISCORD_ALLOWED_IDS", Trim(c["ALLOWED"].Value))
-    for pair in HOTKEY_FIELDS
-        if (Trim(c[pair[1]].Value) != String(S[pair[1]])) {
-            SetSetting(pair[1], Trim(c[pair[1]].Value))
-            keysChanged := true
-        }
-    for pair in GAMEKEY_FIELDS
-        if (Trim(c[pair[1]].Value) != String(S[pair[1]])) {
-            SetSetting(pair[1], Trim(c[pair[1]].Value))
-            keysChanged := true
-        }
-    newLang := (c["LANG"].Value = 2) ? "ar" : "en"
-    newTheme := (c["THEME"].Value = 2) ? "light" : "dark"
-    newSize := ["small", "normal", "large"][c["SIZE"].Value]
-    newStyle := (c["STYLE"].Value = 2) ? "mini" : "card"
-    newAccent := ["yellow", "purple", "cyan", "pink", "green"][c["ACCENT"].Value]
-    needReload := keysChanged || (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
-        || (newStyle != StrLower(S["OVERLAY_STYLE"])) || (newAccent != StrLower(S["ACCENT"]))
-    SetSetting("OVERLAY_STYLE", newStyle)
-    SetSetting("ACCENT", newAccent)
-    SetSetting("TREASURE_WORDS", Trim(c["TREASURE_WORDS"].Value))
-    SetSetting("AUTO_SCREENSHOT_MIN", Number(autoMin))
-    watchMinutes := Number(autoMin)
-    SetSetting("LANG", newLang)
-    SetSetting("THEME", newTheme)
-    SetSetting("OVERLAY_SIZE", newSize)
-    SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right", "custom"][c["CORNER"].Value])
-    g.Destroy()
-    botLastId := "", botFails := 0
-    if running
-        ApplyStopLimits()
-    ApplyStartSchedule()
-    PlaceOverlay()
-    Log("Settings saved. Profile: " S["PROFILE"] ", start: " DescribeStart() ", stop: " DescribeStop() ", action: " S["STOP_ACTION"])
-    if needReload {
-        Reload()                                       ; redraw everything in the new language / theme / size
-        return
-    }
-    ShowTip(Tx("Saved.") "`n" Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
 }
 
 SetSetting(key, value) {
@@ -1891,6 +1654,90 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "'{1}' should be a number from {2} to {3}.", "يجب أن تكون '{1}' رقمًا من {2} إلى {3}.",
+        "...for the first this many minutes of a match:", "...لأول هذا العدد من الدقائق في المباراة:",
+        "...starting this many minutes into the match:", "...بدءًا من هذا العدد من الدقائق في المباراة:",
+        "Add a screenshot", "إضافة لقطة شاشة",
+        "After a match, click 'Stay with team' instead of Play Again", "بعد المباراة، اضغط 'Stay with team' بدلًا من Play Again",
+        "All of it is saved in {1}. Use it to tune the treasure words.", "كل النص محفوظ في {1}. استخدمه لضبط كلمات الكنوز.",
+        "Any", "أي",
+        "Before readying up, Lobby Loop reads the mode button in the lobby (for example 'Build, Squad, Fill').", "قبل الاستعداد، يقرأ Lobby Loop زر الوضع في الردهة (مثلًا 'Build, Squad, Fill').",
+        "Break until {1}", "استراحة حتى {1}",
+        "Build", "البناء",
+        "Chat", "الدردشة",
+        "Check the lobby mode now", "افحص وضع الردهة الآن",
+        "Click into Fortnite. Checking in {1} seconds...", "اضغط داخل Fortnite. الفحص بعد {1} ثوانٍ...",
+        "Clip key", "زر المقطع",
+        "Clip key pressed. Check your recorder's folder for a new clip.", "تم الضغط على زر المقطع. افحص مجلد برنامج التسجيل بحثًا عن مقطع جديد.",
+        "Clip saved", "تم حفظ المقطع",
+        "Clip with", "التسجيل بواسطة",
+        "Couldn't read the mode button. Open the Fortnite lobby first.", "تعذرت قراءة زر الوضع. افتح ردهة Fortnite أولًا.",
+        "Every this many minutes:", "كل هذا العدد من الدقائق:",
+        "Fill", "التعبئة",
+        "For about this many minutes:", "لمدة هذا العدد من الدقائق تقريبًا:",
+        "Hide mode: after landing, mostly stand still to stay alive longer", "وضع الاختباء: بعد الهبوط، ابقَ ثابتًا غالبًا لتبقى حيًا أطول",
+        "Hide the status box from OBS / streams / screenshots", "إخفاء مربع الحالة عن OBS والبث ولقطات الشاشة",
+        "Hiding (staying still)", "اختباء (ثابت في مكانه)",
+        "If the mode is wrong", "إذا كان الوضع خاطئًا",
+        "Keep the PC awake while running", "إبقاء الكمبيوتر مستيقظًا أثناء التشغيل",
+        "Let teammates pick the drop (no jumping off the bus myself)", "دع زملائي يختارون مكان الهبوط (بدون القفز من الحافلة بنفسي)",
+        "Letting teammates pick the drop", "الزملاء يختارون مكان الهبوط",
+        "Lobby Loop keeps you in squad fills while you're away, so your teammates can carry and farm for you.", "يبقيك Lobby Loop في فرق التعبئة أثناء غيابك، ليحملك زملاؤك ويجمعوا لك.",
+        "Lobby is on: {1}", "الردهة على: {1}",
+        "Made for AFKing in squad fills: stay alive, stay polite, stay with good teammates.", "مصمم للغياب في فرق التعبئة: ابقَ حيًا، كن مهذبًا، وابقَ مع الزملاء الجيدين.",
+        "Match {1} done, stayed with team", "انتهت المباراة {1}، تم البقاء مع الفريق",
+        "Mode", "الوضع",
+        "Mode check", "فحص الوضع",
+        "My own clip key (Medal, OBS...)", "زر المقطع الخاص بي (Medal، OBS...)",
+        "My own words", "كلماتي الخاصة",
+        "NVIDIA (Alt+F10)", "NVIDIA (Alt+F10)",
+        "No fill", "بدون تعبئة",
+        "No text found on screen.", "لم يُعثر على نص في الشاشة.",
+        "No treasure found yet.", "لم يُعثر على كنوز بعد.",
+        "On some PCs this also hides it from your screen. Turn it off if the status box disappears.", "على بعض الأجهزة يخفيه هذا عن شاشتك أيضًا. أوقفه إذا اختفى مربع الحالة.",
+        "Or set Fortnite's volume while running (0-100, 100 = leave it):", "أو اضبط صوت Fortnite أثناء التشغيل (0-100، 100 = اتركه):",
+        "Pick a clip method, or type your clip key first.", "اختر طريقة التسجيل، أو اكتب زر المقطع أولًا.",
+        "Pirate tokens", "رموز القراصنة",
+        "Play a sound", "تشغيل صوت",
+        "Read the screen now", "اقرأ الشاشة الآن",
+        "Reading the screen...", "جارٍ قراءة الشاشة...",
+        "Ready up anyway", "استعد على أي حال",
+        "Readying up in {1} s", "الاستعداد بعد {1} ث",
+        "Recent finds", "آخر ما وُجد",
+        "Save a clip (20 s before + 5 s after)", "حفظ مقطع (20 ث قبل + 5 ث بعد)",
+        "Send a chat message to my team at the start of each match", "إرسال رسالة لفريقي في بداية كل مباراة",
+        "Send a message when I'm eliminated", "إرسال رسالة عند إقصائي",
+        "Send the clip to Discord (if under 10 MB)", "إرسال المقطع إلى Discord (إذا كان أقل من 10 ميغابايت)",
+        "Set your recorder's clip length to 25 seconds (Game Bar: 30).", "اضبط طول المقطع في برنامج التسجيل على 25 ثانية (Game Bar: ‏30).",
+        "Spots treasure on screen and tells you, with a screenshot or a clip.", "يرصد الكنوز على الشاشة ويخبرك، مع لقطة شاشة أو مقطع.",
+        "Sprite gizmos", "أدوات Sprite",
+        "Squad fill", "تعبئة الفريق",
+        "Start by itself, every day or with Windows, and take breaks.", "يبدأ وحده، كل يوم أو مع Windows، ويأخذ استراحات.",
+        "Stop after this many matches (0 = no limit):", "التوقف بعد هذا العدد من المباريات (0 = بلا حد):",
+        "Stopped: {1} matches done", "توقف: انتهت {1} مباريات",
+        "Take human-like breaks", "أخذ استراحات مثل البشر",
+        "Team size", "حجم الفريق",
+        "Tell Discord", "إخبار Discord",
+        "Test the clip key", "اختبار زر المقطع",
+        "The lobby is on {1}, you wanted {2}.", "الردهة على {1}، وأنت أردت {2}.",
+        "The switch clicks the mode button and then the words for your mode. If it doesn't work, use Report a bug with a screenshot of the mode screen.", "يضغط التبديل على زر الوضع ثم على كلمات وضعك. إذا لم ينجح، استخدم الإبلاغ عن خطأ مع لقطة لشاشة الوضع.",
+        "Treasure", "الكنوز",
+        "Try to switch the mode for me (experimental)", "حاول تبديل الوضع لي (تجريبي)",
+        "Wait (seconds)", "الانتظار (ثوانٍ)",
+        "Wait a random 1 to this many seconds before clicking Ready:", "انتظر عددًا عشوائيًا من 1 إلى هذا العدد من الثواني قبل الضغط على Ready:",
+        "Wait and tell me", "انتظر وأخبرني",
+        "Watch for treasure", "مراقبة الكنوز",
+        "Weekly treasure cosmetics", "أزياء الكنوز الأسبوعية",
+        "What Lobby Loop reads on screen", "ما يقرؤه Lobby Loop على الشاشة",
+        "What to look for", "عمّ تبحث",
+        "When I find treasure", "عندما أجد كنزًا",
+        "Windows Game Bar (Win+Alt+G)", "شريط ألعاب Windows ‏(Win+Alt+G)",
+        "Windows notification", "إشعار Windows",
+        "Words are separated by commas.", "افصل بين الكلمات بفواصل.",
+        "Wrong mode", "وضع خاطئ",
+        "Wrong mode, waiting (Settings > Mode)", "وضع خاطئ، في الانتظار (الإعدادات > الوضع)",
+        "You want: {1}", "أنت تريد: {1}",
+        "any", "أي",
         "Start / Stop", "تشغيل / إيقاف",
         "Accent colour", "لون التمييز",
         "Add Start menu and Desktop shortcuts", "إضافة اختصارات قائمة ابدأ وسطح المكتب",
@@ -2212,6 +2059,8 @@ BuildOverlay() {
     fs := sz[1], W := sz[2], pad := 16, inner := sz[2] - 32
     al := IsArabic() ? " Right" : ""
     statusGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")
+    if S["STREAM_HIDE"]
+        DllCall("SetWindowDisplayAffinity", "Ptr", statusGui.Hwnd, "UInt", 0x11)   ; hidden from OBS / screenshots
     statusGui.BackColor := "15152B"
     statusGui.MarginX := pad, statusGui.MarginY := 10
     statusGui.SetFont("s" (fs + 4) " c777790", "Segoe UI")
@@ -2773,13 +2622,14 @@ MaxId(msgs) {
 
 HandleCommand(text, authorId := "") {
     global liveMsgId, watchMinutes, lastWatchShot
+    global modeChecked
     if (SubStr(text, 1, 1) != "!")
         return
     parts := StrSplit(Trim(SubStr(text, 2)), " ", , 2)
     cmd := StrLower(parts[1])
     target := parts.Length >= 2 ? Trim(parts[2]) : ""
     arg := ""
-    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause") {   ; these take a value, not a PC name
+    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode" || cmd = "chat") {   ; these take a value, not a PC name
         arg := target
         target := ""
     }
@@ -2794,7 +2644,9 @@ HandleCommand(text, authorId := "") {
                 . "📸 ``!ss`` ``!watch 10`` / ``!watch off`` ``!live`` ``!panel`` ``!log```n"
                 . "⏰ ``!timer 2h`` / ``!timer 9:30pm`` / ``!timer off`` ``!profile overnight```n"
                 . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
-                . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
+                . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups`` ``!break```n"
+                . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!chat hi team```n"
+                . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
         case "status":
@@ -2899,6 +2751,56 @@ HandleCommand(text, authorId := "") {
                 case "sleep", "shutdown":
                     StartPowerAction(cmd)
                     Discord(who (cmd = "sleep" ? "PC goes to sleep" : "PC shuts down") " in 30 s. ``!cancel`` to stop it.")
+            }
+        case "mode":
+            if (arg = "") {
+                m := ReadLobbyMode()
+                Discord(who "🎯 wanted: **" ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"]) "**"
+                    . (IsObject(m) ? ", lobby shows: **" m.text "** " (ModeOk(m) ? "✅" : "❌") : ", couldn't read the lobby right now"))
+                return
+            }
+            for word in StrSplit(StrLower(StrReplace(StrReplace(arg, "-", ""), ",", " ")), " ") {
+                switch word {
+                    case "any":
+                        SetSetting("MODE_TEAM", "any"), SetSetting("MODE_BUILD", "any"), SetSetting("MODE_FILL", "any")
+                    case "solo", "solos", "duo", "duos", "trio", "trios", "squad", "squads":
+                        SetSetting("MODE_TEAM", RTrim(word, "s"))
+                    case "build", "builds":
+                        SetSetting("MODE_BUILD", "build")
+                    case "zb", "zero", "zerobuild":
+                        SetSetting("MODE_BUILD", "zerobuild")
+                    case "fill":
+                        SetSetting("MODE_FILL", "fill")
+                    case "nofill":
+                        SetSetting("MODE_FILL", "nofill")
+                }
+            }
+            modeChecked := false
+            Discord(who "🎯 mode set to **" ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"]) "**")
+        case "clip":
+            Discord(who (DoClip("phone") ? "🎬 clip key pressed" : "🎬 no clip key set (Settings > Treasure)"))
+        case "read":
+            lines := OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight)
+            all := ""
+            for ln in lines
+                if (StrLen(all) < 1500 && StrLen(ln.text) >= 3)
+                    all .= ln.text " · "
+            Discord(who "🔎 on screen: " (all != "" ? all : "no text found"))
+        case "chat":
+            if (arg = "")
+                Discord(who "type ``!chat`` and a message, e.g. ``!chat be right back``")
+            else if !running
+                Discord(who "start Lobby Loop first (``!start``).")
+            else {
+                SendChat(arg)
+                Discord(who "💬 sent to team chat: " arg)
+            }
+        case "break":
+            if running {
+                PauseFor(10)
+                Discord(who "☕ taking a 10 minute break. ``!resume`` to come back early.")
+            } else {
+                Discord(who "not running.")
             }
         case "cancel":
             if (pendingAction != "") {
@@ -3172,7 +3074,8 @@ WizardPage() {
         case 1:
             g.Add("Text", "w460 y+6", Tx("Welcome to Lobby Loop"))
             g.SetFont("s10 norm")
-            g.Add("Text", "w460 y+10", Tx("Pick your language and your name."))
+            g.Add("Text", "w460 y+10", Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can carry and farm for you."))
+            g.Add("Text", "w460 y+8", Tx("Pick your language and your name."))
             g.Add("Text", "y+12", Tx("Language"))
             ctrls["LANG"] := UiDDL(g, "w220", ["English", "العربية"])
             ctrls["LANG"].Choose(WIZ["LANG"] = "ar" ? 2 : 1)
@@ -3352,6 +3255,8 @@ HandleScreenText(txt) {
     if (spect && gameState != "spectating") {
         gameState := "spectating"
         Log("Spectating detected")
+        if (S["CHAT_GG"] && running)
+            SetTimer(() => SendChat(S["CHAT_GG_TEXT"]), -2500)
     } else if (!spect && gameState = "spectating") {
         gameState := "match"
         Log("Back from spectating")
@@ -3381,44 +3286,6 @@ IsClaimWord(u) {
         if (u = w)
             return true
     return false
-}
-
-CheckTreasure(lines) {
-    static seen := Map()
-    words := StrSplit(StrUpper(String(S["TREASURE_WORDS"])), ",", " `t")
-    for ln in lines {
-        u := StrUpper(ln.text)
-        if (InStr(u, "EQUIP") || InStr(u, "TREASURE HUNTERS"))
-            continue
-        for w in words {
-            if (w = "" || !InStr(u, w))
-                continue
-            if (seen.Has(u) && A_TickCount - seen[u] < 180000)
-                break
-            seen[u] := A_TickCount
-            TreasureFound(ln.text)
-            break
-        }
-    }
-}
-
-TreasureFound(text) {
-    global treasureCount, lastTreasure
-    treasureCount += 1
-    lastTreasure := text
-    IniWrite(treasureCount, STATS_FILE, "Stats", "TreasureCount")
-    if !FileExist(TREASURE_FILE)
-        try FileAppend("Date,Time,Treasure`r`n", TREASURE_FILE, "UTF-8")
-    try FileAppend(FormatTime(, "yyyy-MM-dd") "," FormatTime(, "HH:mm") "," StrReplace(text, ",", " ") "`r`n", TREASURE_FILE, "UTF-8")
-    Log("Treasure: " text)
-    SetStatus("🏴‍☠️ " text)
-    Notify("🏴‍☠️ " Tx("Treasure!"), text)
-    if DiscordReady() {
-        shot := A_Temp "\ll_treasure.png"
-        try FileCopy(A_Temp "\ll_screen.png", shot, 1)
-        if !(FileExist(shot) && DiscordFile("🏴‍☠️ Treasure: **" text "** (#" treasureCount " all time)", shot))
-            Discord("🏴‍☠️ Treasure: **" text "** (#" treasureCount " all time)")
-    }
 }
 
 OcrLinesScript() {
@@ -3702,6 +3569,9 @@ OnExitHandler(reason, code) {
     try {
         if S["MUTE_WHILE_RUNNING"]
             SetGameMute(false)
+        else if (Number(S["GAME_VOLUME"]) < 100)
+            SetGameVolume(100)
+        KeepAwake(false)
         ToggleBlackout(false)
         ReleaseAll()
         if (S["LIVE_STATUS"] && DiscordReady() && liveMsgId != "")
@@ -4270,6 +4140,7 @@ DoSwap() {
 ; ============================================================
 MainLoop() {
     global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil
+    global matchStartTick, chatDueTick, readyAtTick, lobbyVisit, modeChecked, modeRecheckTick
     if !running
         return
 
@@ -4330,37 +4201,82 @@ MainLoop() {
         SetStatus(Tx("Clicked a popup button"))
         return
     }
-    ; end screen: save the result areas (and a screenshot) before Play Again changes the screen
-    gotCrops := false, shot := ""
+
+    ; end screen
     if (A_TickCount - lastClick["end"] >= S["CLICK_COOLDOWN"] && FindButton("end")) {
+        lobbyVisit := false
+        if BreakActive() {
+            lastProgress := A_TickCount
+            SleepActive(1500)
+            return
+        }
+        ; save the result areas (and a screenshot) before Play Again changes the screen
+        gotCrops := false, shot := ""
         if S["READ_RESULTS"]
             gotCrops := SaveResultCrops()
         if (S["SCREENSHOT_EVERY_MATCH"] && DiscordReady())
             shot := TakeScreenshot()
+        limit := Integer(S["MATCH_LIMIT"])
+        if (limit > 0 && matches + 1 >= limit) {
+            OnMatchEnd(gotCrops, shot, false)
+            ToggleRun("match limit reached (" limit ")")
+            SetStatus(Tx("Stopped: {1} matches done", limit))
+            StartStopAction()
+            return
+        }
+        stayed := S["STAY_WITH_TEAM"] && StayWithTeamClick()
+        if stayed {
+            lastClick["end"] := A_TickCount
+            gameState := "end"
+        }
+        if (stayed || TryClick("end")) {
+            OnMatchEnd(gotCrops, shot, stayed)
+            return
+        }
     }
-    if TryClick("end") {
-        matches += 1
-        totalMatches += 1
-        lastProgress := A_TickCount
-        unstickTries := 0
-        IniWrite(totalMatches, STATS_FILE, "Stats", "TotalMatches")
-        SetStatus(Tx("Match {1} done, Play Again clicked", matches))
-        res := gotCrops ? ReadResults() : {place: "", xp: ""}
-        RecordMatch(res)
-        info := (res.place != "" ? ", placed #" res.place : "") (res.xp != "" ? ", " FormatNumber(res.xp) " XP" : "")
-        text := "Match " matches " done" info " (all time: " totalMatches ")"
-        if (shot != "")
-            DiscordFile(text, shot)
-        else if S["DISCORD_EVERY_MATCH"]
-            Discord(text)
+
+    ; lobby: breaks, random wait, mode check, then Ready / Play
+    if (A_TickCount - lastClick["lobby"] >= S["CLICK_COOLDOWN"] && FindButton("lobby")) {
+        if !lobbyVisit {                                ; just got to the lobby
+            lobbyVisit := true
+            modeChecked := false, modeRecheckTick := 0
+            maxWait := Number(S["READY_DELAY_MAX"])
+            readyAtTick := (maxWait >= 1) ? A_TickCount + Random(1000, Round(maxWait * 1000)) : 0
+        }
+        if BreakActive() {
+            lastProgress := A_TickCount
+            SleepActive(1500)
+            return
+        }
+        if (readyAtTick && A_TickCount < readyAtTick) {
+            SetStatus("⏳ " Tx("Readying up in {1} s", Ceil((readyAtTick - A_TickCount) / 1000)))
+            lastProgress := A_TickCount
+            SleepActive(300)
+            return
+        }
+        if (!modeChecked || (modeRecheckTick && A_TickCount >= modeRecheckTick)) {
+            modeChecked := true
+            modeRecheckTick := 0
+            if !ModeCheckBeforeReady()
+                modeRecheckTick := A_TickCount + 60000        ; look again in a minute
+        }
+        if modeRecheckTick {
+            SetStatus("⚠️ " Tx("Wrong mode, waiting (Settings > Mode)"))
+            lastProgress := A_TickCount
+            SleepActive(1000)
+            return
+        }
+        if TryClick("lobby") {
+            lobbyVisit := false
+            lastProgress := A_TickCount
+            unstickTries := 0
+            SetStatus(Tx("Ready / Play clicked, waiting for match"))
+        } else {
+            SleepActive(200)
+        }
         return
     }
-    if TryClick("lobby") {
-        lastProgress := A_TickCount
-        unstickTries := 0
-        SetStatus(Tx("Ready / Play clicked, waiting for match"))
-        return
-    }
+    lobbyVisit := false
 
     ; eliminated: stop moving while spectating teammates
     if (gameState = "spectating" && S["SPECTATE_IDLE"]) {
@@ -4368,11 +4284,25 @@ MainLoop() {
         SleepActive(1000)
         return
     }
-    if (gameState != "spectating")
+    if (gameState != "spectating" && gameState != "match") {      ; a new match (or queue) just started
         gameState := "match"
+        matchStartTick := A_TickCount
+        chatDueTick := S["CHAT_START"] ? A_TickCount + Max(10, Number(S["CHAT_DELAY"])) * 1000 : 0
+    }
+    if (chatDueTick && A_TickCount >= chatDueTick) {
+        chatDueTick := 0
+        SendChat(S["CHAT_START_TEXT"])
+    }
 
-    ; 2) Move around like a person
-    SetStatus(Tx("Walking"))
+    ; 2) Hide mode: mostly stand still once the match is going
+    if (S["HIDE_MODE"] && gameState = "match" && MatchMinutes() >= Number(S["HIDE_AFTER_MIN"])) {
+        DoHide()
+        return
+    }
+
+    ; 3) Move around like a person (no jumping / diving while teammates pick the drop)
+    early := S["FOLLOW_DROP"] && MatchMinutes() < Number(S["FOLLOW_DROP_MIN"])
+    SetStatus(early ? "🚌 " Tx("Letting teammates pick the drop") : Tx("Walking"))
     if Chance(S["SLIDE_CHANCE"])
         DoSlide()
     else if Chance(S["CROUCH_CHANCE"])
@@ -4381,9 +4311,9 @@ MainLoop() {
         DoStrafe()
     else
         DoWalk()
-    if (CanAct() && Chance(S["JUMP_CHANCE"]))
+    if (!early && CanAct() && Chance(S["JUMP_CHANCE"]))
         DoJump()
-    if (CanAct() && Chance(S["DIVE_CHANCE"])) {
+    if (!early && CanAct() && Chance(S["DIVE_CHANCE"])) {
         SetStatus(Tx("Diving"))
         DoDive()
     }
@@ -4395,4 +4325,931 @@ MainLoop() {
         SetStatus(Tx("Standing still"))
         SleepActive(Random(S["IDLE_MIN"], S["IDLE_MAX"]))
     }
+}
+
+; Counts a finished match, reads the result, tells Discord
+OnMatchEnd(gotCrops, shot, stayed := false) {
+    global matches, totalMatches, lastProgress, unstickTries, matchStartTick, chatDueTick
+    matches += 1
+    totalMatches += 1
+    lastProgress := A_TickCount
+    unstickTries := 0
+    matchStartTick := 0, chatDueTick := 0
+    IniWrite(totalMatches, STATS_FILE, "Stats", "TotalMatches")
+    SetStatus(stayed ? Tx("Match {1} done, stayed with team", matches) : Tx("Match {1} done, Play Again clicked", matches))
+    res := gotCrops ? ReadResults() : {place: "", xp: ""}
+    RecordMatch(res)
+    info := (res.place != "" ? ", placed #" res.place : "") (res.xp != "" ? ", " FormatNumber(res.xp) " XP" : "")
+    text := "Match " matches " done" info " (all time: " totalMatches ")"
+    if (shot != "")
+        DiscordFile(text, shot)
+    else if S["DISCORD_EVERY_MATCH"]
+        Discord(text)
+}
+
+; ============================================================
+; v7.6: Treasure watcher (categories, actions, clips)
+; ============================================================
+TreasureCategories() {
+    cats := []
+    for c in [["gizmo", "Sprite gizmos", "TREASURE_GIZMO"], ["cosmetic", "Weekly treasure cosmetics", "TREASURE_COSMETIC"],
+              ["token", "Pirate tokens", "TREASURE_TOKEN"], ["custom", "My own words", ""]] {
+        on := (c[3] = "") ? true : S[c[3]]
+        words := (c[3] = "") ? S["TREASURE_WORDS"] : S[c[3] "_WORDS"]
+        if on
+            cats.Push({key: c[1], name: c[2], words: StrSplit(StrUpper(String(words)), ",", " `t")})
+    }
+    return cats
+}
+
+CheckTreasure(lines) {
+    static seen := Map()
+    cats := TreasureCategories()
+    for ln in lines {
+        u := StrUpper(ln.text)
+        if (InStr(u, "EQUIP") || InStr(u, "TREASURE HUNTERS"))
+            continue
+        hit := ""
+        for cat in cats {
+            for w in cat.words
+                if (w != "" && InStr(u, w)) {
+                    hit := cat
+                    break
+                }
+            if IsObject(hit)
+                break
+        }
+        if !IsObject(hit)
+            continue
+        if (seen.Has(u) && A_TickCount - seen[u] < 180000)
+            continue
+        seen[u] := A_TickCount
+        TreasureFound(ln.text, hit)
+    }
+}
+
+TreasureFound(text, cat := "") {
+    global treasureCount, lastTreasure
+    catKey := IsObject(cat) ? cat.key : "custom"
+    catName := IsObject(cat) ? Tx(cat.name) : Tx("Treasure")
+    treasureCount += 1
+    lastTreasure := text
+    IniWrite(treasureCount, STATS_FILE, "Stats", "TreasureCount")
+    n := Integer(IniRead(STATS_FILE, "Stats", "Treasure_" catKey, 0)) + 1
+    IniWrite(n, STATS_FILE, "Stats", "Treasure_" catKey)
+    if !FileExist(TREASURE_FILE)
+        try FileAppend("Date,Time,Category,Treasure`r`n", TREASURE_FILE, "UTF-8")
+    try FileAppend(FormatTime(, "yyyy-MM-dd") "," FormatTime(, "HH:mm") "," catKey "," StrReplace(text, ",", " ") "`r`n", TREASURE_FILE, "UTF-8")
+    Log("Treasure (" catKey "): " text)
+    SetStatus("🏴‍☠️ " text)
+    if S["TREASURE_BEEP"]
+        SetTimer(() => (SoundBeep(1200, 90), SoundBeep(1600, 140)), -10)
+    if S["TREASURE_NOTIFY"]
+        Notify("🏴‍☠️ " catName, text)
+    msg := "🏴‍☠️ **" catName "**: " text " (#" treasureCount " all time)"
+    if (DiscordReady() && S["TREASURE_DISCORD"]) {
+        shot := A_Temp "\ll_treasure.png"
+        sent := false
+        if S["TREASURE_SCREENSHOT"] {
+            try FileCopy(A_Temp "\ll_screen.png", shot, 1)
+            sent := FileExist(shot) && DiscordFile(msg, shot)
+        }
+        if !sent
+            Discord(msg)
+    }
+    if S["TREASURE_CLIP"]
+        SetTimer(() => DoClip(text), -Max(100, Number(S["CLIP_DELAY"]) * 1000))
+}
+
+; Presses the clip key of the recorder you use. Its clip length should be 25 s
+; (20 s before the treasure + the 5 s we wait).
+DoClip(why := "") {
+    method := StrLower(String(S["CLIP_METHOD"]))
+    if (method = "gamebar")
+        Send("#!g")
+    else if (method = "nvidia")
+        Send("!{F10}")
+    else if (Trim(String(S["CLIP_KEY"])) != "")
+        Send(HotkeyToSend(S["CLIP_KEY"]))
+    else
+        return false
+    Log("Clip key pressed (" method ")" (why != "" ? " for: " why : ""))
+    SetStatus("🎬 " Tx("Clip saved"))
+    if (S["CLIP_UPLOAD"] && DiscordReady())
+        SetTimer(() => ClipUpload(why), -12000)       ; give the recorder time to save the file
+    return true
+}
+
+; "^!c" -> "^!{c}", "F8" -> "{F8}" (so Send presses it like the hotkey)
+HotkeyToSend(hk) {
+    hk := Trim(String(hk))
+    if !RegExMatch(hk, "^([#!^+]*)(.+)$", &m)
+        return hk
+    return m[1] "{" m[2] "}"
+}
+
+ClipFolder() {
+    f := Trim(String(S["CLIP_FOLDER"]))
+    return (f != "") ? f : EnvGet("USERPROFILE") "\Videos"
+}
+
+; Newest video saved in the last 2 minutes (searches sub-folders too)
+FindNewestClip() {
+    newest := "", newestTime := ""
+    limit := DateAdd(A_Now, -2, "Minutes")
+    for ext in ["mp4", "mkv", "mov"] {
+        try {
+            loop files ClipFolder() "\*." ext, "R" {
+                if (A_LoopFileTimeModified < limit)
+                    continue
+                if (newest = "" || A_LoopFileTimeModified > newestTime)
+                    newest := A_LoopFileFullPath, newestTime := A_LoopFileTimeModified
+            }
+        }
+    }
+    return newest
+}
+
+ClipUpload(why := "") {
+    path := FindNewestClip()
+    if (path = "") {
+        Log("No new clip found in " ClipFolder())
+        Discord("🎬 Clip key pressed" (why != "" ? " for **" why "**" : "") ", but no new video showed up in " ClipFolder())
+        return
+    }
+    sizeMB := Round(FileGetSize(path) / 1048576, 1)
+    SplitPath(path, &name)
+    if (sizeMB <= 9.5) {
+        if DiscordFile("🎬 Clip" (why != "" ? ": **" why "**" : "") " (" sizeMB " MB)", path)
+            return
+    }
+    Discord("🎬 Clip saved on the PC: **" name "** (" sizeMB " MB, too big for Discord's 10 MB limit)")
+}
+
+RecentTreasureText(count := 5) {
+    rows := ReadCsvRows(TREASURE_FILE)
+    if !rows.Length
+        return Tx("No treasure found yet.")
+    out := ""
+    loop Min(count, rows.Length) {
+        r := rows[rows.Length - A_Index + 1]
+        out .= (out = "" ? "" : "`n") "🏴‍☠️ " r[1] " " r[2] "   " (r.Length >= 4 ? r[4] : r[r.Length])
+    }
+    return out
+}
+
+; ============================================================
+; v7.6: read part of the screen right now (used by the mode check, Stay with team,
+;       and the "Read the screen now" button)
+; ============================================================
+OcrRegionSync(x, y, w, h) {
+    lines := []
+    img := A_Temp "\ll_region.png", out := A_Temp "\ll_region.txt"
+    if !SaveRegionImage(img, x, y, w, h)
+        return lines
+    script := A_Temp "\ll_ocr_lines_v75.ps1"
+    if !FileExist(script)
+        FileAppend(OcrLinesScript(), script, "UTF-8")
+    try FileDelete(out)
+    try RunWait('powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' script '" "' img '" "' out '"', , "Hide")
+    if !FileExist(out)
+        return lines
+    for raw in StrSplit(FileRead(out, "UTF-8"), "`n", "`r") {
+        p := StrSplit(raw, "|", , 5)
+        if (p.Length < 5 || !IsNumber(p[1]))
+            continue
+        lines.Push({x: x + Integer(p[1]), y: y + Integer(p[2]), w: Integer(p[3]), h: Integer(p[4]), text: Trim(p[5])})
+    }
+    return lines
+}
+
+ShowScreenText(waitMs := 0) {
+    if waitMs {
+        ShowTip(Tx("Click into Fortnite. Checking in {1} seconds...", waitMs // 1000), waitMs - 300)
+        Sleep(waitMs)
+    }
+    ShowTip(Tx("Reading the screen..."), 1500)
+    lines := OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight)
+    all := ""
+    for ln in lines
+        all .= ln.text "`r`n"
+    path := A_ScriptDir "\" BASE "_screen_text.txt"
+    try FileDelete(path)
+    try FileAppend(all, path, "UTF-8")
+    rows := []
+    for ln in lines {
+        if (rows.Length >= 14)
+            break
+        if (StrLen(ln.text) >= 3)
+            rows.Push(["•", ln.text])
+    }
+    if !rows.Length
+        rows.Push(["⚠️", Tx("No text found on screen.")])
+    ShowCard("🔎 " Tx("What Lobby Loop reads on screen"), rows, 15000, Tx("All of it is saved in {1}. Use it to tune the treasure words.", BASE "_screen_text.txt"), 28)
+}
+
+; ============================================================
+; v7.6: game mode (Solo / Duo / Trio / Squad, Build / Zero Build, Fill / No fill)
+; ============================================================
+; Reads the mode button above Ready in the lobby, e.g. "Build, Squad, Fill"
+ReadLobbyMode() {
+    lines := OcrRegionSync(0, Round(A_ScreenHeight * 0.52), Round(A_ScreenWidth * 0.32), Round(A_ScreenHeight * 0.36))
+    all := "", anchor := ""
+    for ln in lines {
+        u := StrUpper(ln.text)
+        all .= " " u
+        if (!IsObject(anchor) && RegExMatch(u, "\b(SOLOS?|DUOS?|TRIOS?|SQUADS?|ZERO BUILD|BATTLE ROYALE)\b"))
+            anchor := ln
+    }
+    if !IsObject(anchor)
+        return 0
+    m := ParseMode(all)
+    m.x := anchor.x, m.y := anchor.y, m.w := anchor.w, m.h := anchor.h, m.text := ModeText(m.team != "" ? m.team : "?", m.build != "" ? m.build : "?", m.fill != "" ? m.fill : "?")
+    return m
+}
+
+ParseMode(u) {
+    team := RegExMatch(u, "\bSOLOS?\b") ? "solo" : RegExMatch(u, "\bDUOS?\b") ? "duo" : RegExMatch(u, "\bTRIOS?\b") ? "trio" : RegExMatch(u, "\bSQUADS?\b") ? "squad" : ""
+    build := InStr(u, "ZERO BUILD") ? "zerobuild" : ((InStr(u, "BUILD") || InStr(u, "BATTLE ROYALE")) ? "build" : "")
+    fill := RegExMatch(u, "NO FILL|DON.?T FILL") ? "nofill" : (RegExMatch(u, "\bFILL\b") ? "fill" : "")
+    return {team: team, build: build, fill: fill}
+}
+
+ModeWanted() {
+    return StrLower(S["MODE_TEAM"]) != "any" || StrLower(S["MODE_BUILD"]) != "any" || StrLower(S["MODE_FILL"]) != "any"
+}
+
+ModeOk(m) {
+    if !IsObject(m)
+        return false
+    for pair in [["MODE_TEAM", "team"], ["MODE_BUILD", "build"], ["MODE_FILL", "fill"]] {
+        want := StrLower(S[pair[1]])
+        if (want != "any" && m.%pair[2]% != "" && m.%pair[2]% != want)
+            return false
+    }
+    return true
+}
+
+ModeText(team, build, fill) {
+    names := Map("any", Tx("any"), "solo", "Solo", "duo", "Duo", "trio", "Trio", "squad", "Squad",
+                 "build", "Build", "zerobuild", "Zero Build", "fill", "Fill", "nofill", "No fill")
+    get(k) => names.Has(StrLower(k)) ? names[StrLower(k)] : k
+    return get(build) ", " get(team) ", " get(fill)
+}
+
+; Experimental: opens the mode picker and clicks the words for the mode you want
+TrySwitchMode(m) {
+    labels := Map("solo", ["SOLO", "SOLOS"], "duo", ["DUO", "DUOS"], "trio", ["TRIO", "TRIOS"], "squad", ["SQUAD", "SQUADS"],
+                  "build", ["BUILD", "BATTLE ROYALE"], "zerobuild", ["ZERO BUILD"], "fill", ["FILL"], "nofill", ["NO FILL", "DON'T FILL"])
+    Log("Trying to switch mode from '" m.text "'")
+    ReleaseAll()
+    MouseMove(m.x + m.w // 2, m.y + m.h // 2, 5)
+    Sleep(200)
+    Click()
+    Sleep(2200)
+    for key in ["MODE_BUILD", "MODE_TEAM", "MODE_FILL"] {
+        want := StrLower(S[key])
+        if (want = "any" || !labels.Has(want))
+            continue
+        lines := OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight)
+        clicked := false
+        for ln in lines {
+            u := Trim(StrUpper(ln.text))
+            for lab in labels[want]
+                if (u = lab) {
+                    MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+                    Sleep(150)
+                    Click()
+                    clicked := true
+                    Log("Mode switch: clicked '" ln.text "'")
+                    break
+                }
+            if clicked
+                break
+        }
+        if !clicked
+            Log("Mode switch: couldn't find '" want "' on screen")
+        Sleep(1400)
+    }
+    Send("{Esc}")
+    Sleep(1800)
+    after := ReadLobbyMode()
+    ok := ModeOk(after)
+    Log("Mode switch " (ok ? "worked" : "didn't work") (IsObject(after) ? ", now: " after.text : ""))
+    return ok
+}
+
+; Called once per lobby visit before clicking Ready. Returns true if it's OK to ready up.
+ModeCheckBeforeReady() {
+    global modeWarned
+    if !ModeWanted()
+        return true
+    m := ReadLobbyMode()
+    if !IsObject(m) {
+        Log("Mode check: couldn't read the mode button")
+        return true                                     ; can't tell, don't block
+    }
+    if ModeOk(m) {
+        modeWarned := false
+        return true
+    }
+    wanted := ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"])
+    Log("Wrong mode: '" m.text "', want " wanted)
+    if (S["MODE_SWITCH"] && TrySwitchMode(m))
+        return true
+    if !modeWarned {
+        modeWarned := true
+        Notify(Tx("Wrong mode"), Tx("The lobby is on {1}, you wanted {2}.", m.text, wanted))
+        Discord("⚠️ Wrong mode: the lobby is on **" m.text "**, you wanted **" wanted "**.")
+    }
+    return StrLower(S["MODE_ACTION"]) = "ready"
+}
+
+; ============================================================
+; v7.6: squad-fill helpers and extras
+; ============================================================
+SendChat(text) {
+    text := Trim(String(text))
+    if (text = "" || !CanAct())
+        return
+    ReleaseAll()
+    Send("{" S["KEY_CHAT"] "}")
+    Sleep(450)
+    SendText(text)
+    Sleep(250)
+    Send("{Enter}")
+    Log("Chat: " text)
+}
+
+; Stay with team: on the end screen, click "STAY WITH TEAM" instead of Play Again
+StayWithTeamClick() {
+    global clicks
+    W := A_ScreenWidth, H := A_ScreenHeight
+    for ln in OcrRegionSync(Round(W * 0.60), Round(H * 0.20), Round(W * 0.40), Round(H * 0.65)) {
+        if InStr(StrUpper(ln.text), "STAY WITH TEAM") {
+            ReleaseAll()
+            MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+            Sleep(180)
+            Click()
+            clicks += 1
+            Log("Clicked Stay with team")
+            return true
+        }
+    }
+    return false
+}
+
+KeepAwake(on) {
+    ; ES_CONTINUOUS | ES_SYSTEM_REQUIRED while running, back to normal when stopped
+    DllCall("SetThreadExecutionState", "UInt", on ? 0x80000001 : 0x80000000)
+}
+
+; Sets Fortnite's own volume (0-100) in the Windows volume mixer
+SetGameVolume(pct) {
+    pid := ProcessExist(GameExe())
+    if !pid
+        return false
+    found := false
+    dev := 0, mgr := 0, sessEnum := 0
+    try {
+        enumr := ComObject("{BCDE0395-E52F-467C-8E3D-C4579291692E}", "{A95664D2-9614-4F35-A746-DE8DB63617E6}")
+        ComCall(4, enumr, "Int", 0, "Int", 1, "Ptr*", &dev)
+        ComCall(3, dev, "Ptr", GuidBuf("{77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F}"), "UInt", 23, "Ptr", 0, "Ptr*", &mgr)
+        ComCall(5, mgr, "Ptr*", &sessEnum)
+        cnt := 0
+        ComCall(3, sessEnum, "Int*", &cnt)
+        loop cnt {
+            ctl := 0
+            ComCall(4, sessEnum, "Int", A_Index - 1, "Ptr*", &ctl)
+            try {
+                ctl2 := ComObjQuery(ctl, "{bfb7ff88-7239-4fc9-8fa2-07c950be9c6d}")
+                spid := 0
+                ComCall(14, ctl2, "UInt*", &spid)
+                if (spid = pid) {
+                    vol := ComObjQuery(ctl, "{87CE5498-68D6-44E5-9215-6F24D7ED6E4E}")
+                    ComCall(3, vol, "Float", Max(0, Min(100, pct)) / 100, "Ptr", 0)   ; SetMasterVolume
+                    found := true
+                }
+            }
+            ObjRelease(ctl)
+        }
+    } catch as e {
+        Log("Volume failed: " e.Message)
+    }
+    for p in [sessEnum, mgr, dev]
+        if p
+            ObjRelease(p)
+    return found
+}
+
+; Human-like breaks: every BREAK_EVERY_MIN minutes, a pause of about BREAK_MIN minutes
+BreakActive() {
+    global breakNextTick, breakUntilTick
+    if !S["BREAKS"]
+        return false
+    if (breakUntilTick && A_TickCount < breakUntilTick) {
+        SetStatus("☕ " Tx("Break until {1}", FormatTime(DateAdd(A_Now, (breakUntilTick - A_TickCount) // 1000, "Seconds"), "h:mm tt")))
+        return true
+    }
+    if breakUntilTick {                                ; break just ended
+        breakUntilTick := 0
+        Log("Break over")
+    }
+    if !breakNextTick
+        breakNextTick := sessionStart + Max(10, Number(S["BREAK_EVERY_MIN"])) * 60000
+    if (A_TickCount >= breakNextTick) {
+        mins := Max(1, Number(S["BREAK_MIN"]))
+        breakUntilTick := A_TickCount + Random(Round(mins * 0.6 * 60000), Round(mins * 1.4 * 60000))
+        breakNextTick := breakUntilTick + Max(10, Number(S["BREAK_EVERY_MIN"])) * 60000
+        ReleaseAll()
+        Log("Break started")
+        return true
+    }
+    return false
+}
+
+; Minutes since the current match started (0 if not in a match)
+MatchMinutes() {
+    return matchStartTick ? (A_TickCount - matchStartTick) / 60000 : 0
+}
+
+; Hide mode: mostly stand still and look around, to stay alive longer while teammates play
+DoHide() {
+    SetStatus("🫥 " Tx("Hiding (staying still)"))
+    r := Random(1, 100)
+    if (r <= 70)
+        SleepActive(Random(2000, 5000))
+    else if (r <= 90)
+        Look(Random(-250, 250), Random(-20, 20), 12)
+    else
+        HoldKeys([KEYMAP[Pick(["fwd", "left", "back", "right"])]], Random(250, 500))
+}
+
+; ============================================================
+; v7.6: Settings window (12 sections)
+; ============================================================
+OpenSettings(startPage := 1) {
+    g := ThemeGui(TITLE " - " Tx("Settings"))
+    c := Map()
+    pages := []
+    navs := []
+    CW := 620                                         ; content width
+    CX := 230                                         ; content left edge
+    COL2 := 320                                       ; second column offset
+
+    ; sidebar
+    g.Add("Text", "x0 y0 w200 h660 Background" UiCol("side"))
+    UiText(g, "x20 y18 w170", "🔁 " TITLE, "head", UiCol("side"))
+    UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
+    sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"],
+                 ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"], ["🔗", "Share & tools"]]
+    for i, sec in sections {
+        n := g.Add("Text", "x10 y" (78 + (i - 1) * 44) " w180 h38 0x200 Background" UiCol("side"), "   " sec[1] "   " Tx(sec[2]))
+        n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
+        navs.Push(n)
+    }
+
+    add(ctrl) => (pages[pages.Length].Push(ctrl), ctrl)
+    addAll(arr) {
+        for x in arr
+            pages[pages.Length].Push(x)
+        return arr[1]
+    }
+    newPage(title, sub := "") {
+        pages.Push([])
+        add(UiText(g, "x" CX " y22 w" CW, title, "title"))
+        if (sub != "")
+            add(UiText(g, "x" CX " y+2 w" CW, sub, "muted"))
+    }
+    tick(key, label, opts := "y+8", width := 0) => (c[key] := addAll(UiCheck(g, "x" CX " " opts, Tx(label), S[key], width ? width : CW - 30)))
+    say(text, opts := "y+12", width := 0) => add(UiText(g, "x" CX " " opts " w" (width ? width : CW), text))
+    hint(text, opts := "y+3") => add(UiText(g, "x" CX " " opts " w" CW, text, "muted"))
+    edit(key, opts := "y+4 w200", value := "") => (c[key] := add(UiEdit(g, "x" CX " " opts " r1", value != "" ? value : S[key])))
+    choice(key, items, keys, opts := "y+4 w260") {
+        d := add(UiDDL(g, "x" CX " " opts, items))
+        idx := 1
+        for i, k in keys
+            if (k = StrLower(String(S[key])))
+                idx := i
+        d.Choose(idx)
+        c[key] := d
+        return d
+    }
+
+    ; ---- 1. Play ----
+    newPage(Tx("Play"), Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can carry and farm for you."))
+    say(Tx("Profile"), "y+16")
+    c["PROFILE"] := add(UiDDL(g, "x" CX " y+4 w300", [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")]))
+    c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
+    say(Tx("Stop after a time, or at a clock time:"), "y+14")
+    c["STOP"] := add(UiEdit(g, "x" CX " y+4 w300 r1", CurrentStopText()))
+    hint(Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"))
+    say(Tx("When it stops:"), "y+12")
+    c["ACTION"] := add(UiDDL(g, "x" CX " y+4 w300", ActionLabels()))
+    c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
+    hint(Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE))
+    say(Tx("Stop after this many matches (0 = no limit):"), "y+12")
+    edit("MATCH_LIMIT", "y+4 w120")
+    say(Tx("Your name (for Discord and the leaderboard):"), "y+12")
+    c["PLAYER_NAME"] := add(UiEdit(g, "x" CX " y+4 w300 r1", PlayerName()))
+
+    ; ---- 2. Mode ----
+    newPage(Tx("Mode"), Tx("Before readying up, Lobby Loop reads the mode button in the lobby (for example 'Build, Squad, Fill')."))
+    say(Tx("Team size"), "y+16 Section", 280)
+    choice("MODE_TEAM", [Tx("Any"), "Solo", "Duo", "Trio", "Squad"], ["any", "solo", "duo", "trio", "squad"], "y+4 w260")
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("Build")))
+    d := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Any"), "Build", "Zero Build"]))
+    d.Choose(StrLower(S["MODE_BUILD"]) = "build" ? 2 : StrLower(S["MODE_BUILD"]) = "zerobuild" ? 3 : 1)
+    c["MODE_BUILD"] := d
+    say(Tx("Fill"), "y+16 Section", 280)
+    choice("MODE_FILL", [Tx("Any"), "Fill", Tx("No fill")], ["any", "fill", "nofill"], "y+4 w260")
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("If the mode is wrong")))
+    d2 := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Wait and tell me"), Tx("Ready up anyway")]))
+    d2.Choose(StrLower(S["MODE_ACTION"]) = "ready" ? 2 : 1)
+    c["MODE_ACTION"] := d2
+    tick("MODE_SWITCH", "Try to switch the mode for me (experimental)", "y+18")
+    hint(Tx("The switch clicks the mode button and then the words for your mode. If it doesn't work, use Report a bug with a screenshot of the mode screen."))
+    mb := add(UiButton(g, "x" CX " y+14 w260", "🔎 " Tx("Check the lobby mode now")))
+    mb.OnEvent("Click", (*) => (g.Destroy(), ShowModeCheck(3000)))
+
+    ; ---- 3. Squad fill ----
+    newPage(Tx("Squad fill"), Tx("Made for AFKing in squad fills: stay alive, stay polite, stay with good teammates."))
+    tick("SPECTATE_IDLE", "Stop moving while I'm spectating teammates", "y+16")
+    tick("FOLLOW_DROP", "Let teammates pick the drop (no jumping off the bus myself)")
+    say(Tx("...for the first this many minutes of a match:"), "y+4")
+    edit("FOLLOW_DROP_MIN", "y+4 w120")
+    tick("HIDE_MODE", "Hide mode: after landing, mostly stand still to stay alive longer", "y+12")
+    say(Tx("...starting this many minutes into the match:"), "y+4")
+    edit("HIDE_AFTER_MIN", "y+4 w120")
+    tick("STAY_WITH_TEAM", "After a match, click 'Stay with team' instead of Play Again", "y+12")
+    tick("CHAT_START", "Send a chat message to my team at the start of each match", "y+8")
+    edit("CHAT_START_TEXT", "y+4 w" CW)
+    tick("CHAT_GG", "Send a message when I'm eliminated", "y+8")
+    edit("CHAT_GG_TEXT", "y+4 w300")
+    tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+10")
+
+    ; ---- 4. Schedule ----
+    newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows, and take breaks."))
+    say(Tx("Start every day at:"), "y+16")
+    c["START"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["START_AT_TIME"])))
+    hint(Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
+    tick("AUTO_START", "Start by itself when I click into Fortnite", "y+14")
+    tick("LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)")
+    tick("START_WITH_WINDOWS", "Start with Windows")
+    tick("BREAKS", "Take human-like breaks", "y+14")
+    say(Tx("Every this many minutes:") , "y+4 Section", 280)
+    edit("BREAK_EVERY_MIN", "y+4 w120")
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("For about this many minutes:")))
+    c["BREAK_MIN"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["BREAK_MIN"]))
+    say(Tx("Wait a random 1 to this many seconds before clicking Ready:"), "y+14")
+    edit("READY_DELAY_MAX", "y+4 w120")
+
+    ; ---- 5. Extras ----
+    newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
+    tick("MUTE_WHILE_RUNNING", "Mute Fortnite while running", "y+16")
+    say(Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), "y+6")
+    edit("GAME_VOLUME", "y+4 w120")
+    tick("BLACKOUT_ON_START", "Dim the screen while running", "y+12")
+    tick("KEEP_AWAKE", "Keep the PC awake while running")
+    tick("READ_RESULTS", "Read my placement and XP after each match")
+    tick("NOTIFY", "Windows notifications (stopped, stuck, crashed)")
+    tick("STREAM_HIDE", "Hide the status box from OBS / streams / screenshots")
+    hint(Tx("On some PCs this also hides it from your screen. Turn it off if the status box disappears."))
+
+    ; ---- 6. Treasure ----
+    newPage(Tx("Treasure"), Tx("Spots treasure on screen and tells you, with a screenshot or a clip."))
+    tick("WATCH_TREASURE", "Watch for treasure", "y+14")
+    add(UiText(g, "x" CX " y+14 w300 Section", Tx("What to look for"), "head"))
+    for item in [["TREASURE_GIZMO", "Sprite gizmos"], ["TREASURE_COSMETIC", "Weekly treasure cosmetics"], ["TREASURE_TOKEN", "Pirate tokens"]] {
+        c[item[1]] := addAll(UiCheck(g, "xs y+10", Tx(item[2]), S[item[1]], 270))
+        c[item[1] "_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S[item[1] "_WORDS"]))
+    }
+    add(UiText(g, "xs y+10 w300", Tx("My own words")))
+    c["TREASURE_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_WORDS"]))
+    add(UiText(g, "xs y+4 w300", Tx("Words are separated by commas."), "muted"))
+    add(UiText(g, "xs+" COL2 " ys w300", Tx("When I find treasure"), "head"))
+    first := true
+    for item in [["TREASURE_NOTIFY", "Windows notification"], ["TREASURE_BEEP", "Play a sound"], ["TREASURE_DISCORD", "Tell Discord"],
+                 ["TREASURE_SCREENSHOT", "Add a screenshot"], ["TREASURE_CLIP", "Save a clip (20 s before + 5 s after)"]] {
+        c[item[1]] := addAll(UiCheck(g, "xs+" COL2 (first ? " y+10" : " y+6"), Tx(item[2]), S[item[1]], 270))
+        first := false
+    }
+    add(UiText(g, "xs+" COL2 " y+10 w300", Tx("Clip with")))
+    cm := add(UiDDL(g, "xs+" COL2 " y+4 w300", [Tx("Windows Game Bar (Win+Alt+G)"), Tx("NVIDIA (Alt+F10)"), Tx("My own clip key (Medal, OBS...)")]))
+    cm.Choose(StrLower(S["CLIP_METHOD"]) = "nvidia" ? 2 : StrLower(S["CLIP_METHOD"]) = "custom" ? 3 : 1)
+    c["CLIP_METHOD"] := cm
+    add(UiText(g, "xs+" COL2 " y+8 w145", Tx("Clip key")))
+    add(UiText(g, "x+10 yp w145", Tx("Wait (seconds)")))
+    c["CLIP_KEY"] := add(UiEdit(g, "xs+" COL2 " y+4 w145 r1", S["CLIP_KEY"]))
+    c["CLIP_DELAY"] := add(UiEdit(g, "x+10 yp w145 r1", S["CLIP_DELAY"]))
+    c["CLIP_UPLOAD"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Tx("Send the clip to Discord (if under 10 MB)"), S["CLIP_UPLOAD"], 270))
+    add(UiText(g, "x" CX " y+14 w" CW, Tx("Set your recorder's clip length to 25 seconds (Game Bar: 30)."), "muted"))
+    add(UiText(g, "x" CX " y+10 w" CW, Tx("Recent finds"), "head"))
+    add(UiText(g, "x" CX " y+4 w" CW " r3", RecentTreasureText(3), "muted"))
+    rb := add(UiButton(g, "x" CX " y+8 w250", "🔎 " Tx("Read the screen now")))
+    rb.OnEvent("Click", (*) => (g.Destroy(), ShowScreenText(4000)))
+    tc := add(UiButton(g, "x+10 yp w200", "🎬 " Tx("Test the clip key")))
+    tc.OnEvent("Click", (*) => SettingsTestClip(g, c))
+
+    ; ---- 7. Hotkeys ----
+    newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
+    add(UiText(g, "x" CX " y+16 w280 Section", Tx("Lobby Loop keys"), "head"))
+    for i, pair in HOTKEY_FIELDS {
+        add(UiText(g, "xs y+" (i = 1 ? 10 : 8) " w170", Tx(pair[2])))
+        c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w100 r1", S[pair[1]]))
+    }
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("Your Fortnite keys"), "head"))
+    for i, pair in GAMEKEY_FIELDS {
+        add(UiText(g, "xs+" COL2 " y+" (i = 1 ? 10 : 8) " w150", Tx(pair[2])))
+        c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w120 r1", S[pair[1]]))
+    }
+    hint(Tx("Examples: F8, Insert, Numpad0, ^!s (Ctrl+Alt+S), +F8 (Shift+F8). Lobby Loop restarts after you save."), "y+16")
+
+    ; ---- 8. Popups ----
+    newPage(Tx("Popups"), Tx("Buttons you taught with {1}. They're clicked whenever they show up.", HK_TEACH))
+    if !POPUPS.Length
+        hint(Tx("No popup buttons learned yet."), "y+18")
+    for i, p in POPUPS {
+        pw := Round((p.r - p.l) * A_ScreenWidth), ph := Round((p.b - p.t) * A_ScreenHeight)
+        add(g.Add("Text", "x" CX " y+" (i = 1 ? 18 : 10) " w22 h22 Background" Format("{:06X}", p.color)))
+        add(UiText(g, "x+10 yp+2 w300", "#" i "   " pw " x " ph " px   (" Round(p.l * 100) "%, " Round(p.t * 100) "%)"))
+        fb := add(UiButton(g, "x+10 yp-4 w140", "🗑 " Tx("Forget")))
+        fb.OnEvent("Click", SettingsForgetPopup.Bind(i, g))
+    }
+    if POPUPS.Length {
+        fa := add(UiButton(g, "x" CX " y+18 w200", Tx("Forget all")))
+        fa.OnEvent("Click", (*) => (ForgetPopups(), g.Destroy(), OpenSettings(8)))
+    }
+    hint(Tx("To teach one: hover over an empty part of the popup's button and press {1}. To forget the one under the mouse: Shift+{1}.", HK_TEACH), "y+18")
+
+    ; ---- 9. Discord alerts ----
+    newPage(Tx("Discord alerts"), Tx("Messages, screenshots and a daily summary in your channel."))
+    say(Tx("Discord alert link (optional):"), "y+16")
+    c["HOOK"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", DiscordUrl()))
+    tb := add(UiButton(g, "x" CX " y+10 w220", Tx("Send test message")))
+    tb.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
+    hb := add(UiButton(g, "x+10 yp w220", "❓ " Tx("How do I get this?")))
+    hb.OnEvent("Click", (*) => ShowGuide("webhook", g.Hwnd))
+    tick("SCREENSHOT_EVERY_MATCH", "Screenshot to Discord after every match", "y+16")
+    tick("LIVE_STATUS", "Live status message (shows when the PC went offline)")
+    say(Tx("Daily Discord summary at (blank = off):"), "y+14 Section", 280)
+    c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["DAILY_SUMMARY_TIME"])))
+    add(UiText(g, "xs+" COL2 " ys w300", Tx("Screenshot to Discord every (minutes, 0 = off):")))
+    c["AUTO_SCREENSHOT_MIN"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["AUTO_SCREENSHOT_MIN"]))
+
+    ; ---- 10. Phone control ----
+    newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
+    hb2 := add(UiButton(g, "x" CX " y+14 w260", "❓ " Tx("How do I set this up?")))
+    hb2.OnEvent("Click", (*) => ShowGuide("bot", g.Hwnd))
+    say(Tx("Bot token"), "y+14")
+    c["TOKEN"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1 Password", S["DISCORD_BOT_TOKEN"]))
+    say(Tx("Channel ID"), "y+12")
+    c["CHANNEL"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_CHANNEL_ID"]))
+    say(Tx("Your Discord user ID (only you can control it)"), "y+12")
+    c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
+    pb := add(UiButton(g, "x" CX " y+14 w260", "🎛️ " Tx("Post the control panel")))
+    pb.OnEvent("Click", (*) => ShowTip(PanelCreate() ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500))
+    hint(Tx("Type !help in your channel to see all 30+ commands."), "y+10")
+
+    ; ---- 11. Look ----
+    newPage(Tx("Look"), Tx("Language, theme and the status box."))
+    add(UiText(g, "x" CX " y+18 w280 Section", Tx("Language")))
+    c["LANG"] := add(UiDDL(g, "xs y+4 w260", ["English", "العربية"]))
+    c["LANG"].Choose(IsArabic() ? 2 : 1)
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("Theme")))
+    c["THEME"] := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Dark"), Tx("Light")]))
+    c["THEME"].Choose(DarkOn() ? 1 : 2)
+    add(UiText(g, "xs y+16 w280 Section", Tx("Accent colour")))
+    c["ACCENT"] := add(UiDDL(g, "xs y+4 w260", [Tx("Yellow"), Tx("Purple"), Tx("Cyan"), Tx("Pink"), Tx("Green")]))
+    ai := 1
+    for i, k in ["yellow", "purple", "cyan", "pink", "green"]
+        if (k = StrLower(S["ACCENT"]))
+            ai := i
+    c["ACCENT"].Choose(ai)
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("Status box style")))
+    c["STYLE"] := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Card"), Tx("Mini")]))
+    c["STYLE"].Choose(StrLower(S["OVERLAY_STYLE"]) = "mini" ? 2 : 1)
+    add(UiText(g, "xs y+16 w280 Section", Tx("Status box corner")))
+    c["CORNER"] := add(UiDDL(g, "xs y+4 w260", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right"), Tx("Where I dragged it")]))
+    ci := 1
+    for i, k in ["top-left", "top-right", "bottom-left", "bottom-right", "custom"]
+        if (k = StrLower(S["OVERLAY_CORNER"]))
+            ci := i
+    c["CORNER"].Choose(ci)
+    add(UiText(g, "xs+" COL2 " ys w280", Tx("Status box size")))
+    c["SIZE"] := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Small"), Tx("Normal"), Tx("Large")]))
+    si := 2
+    for i, k in ["small", "normal", "large"]
+        if (k = StrLower(S["OVERLAY_SIZE"]))
+            si := i
+    c["SIZE"].Choose(si)
+    mv := add(UiButton(g, "xs y+18 w260", "✋ " Tx("Move status box")))
+    mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
+
+    ; ---- 12. Share & tools ----
+    newPage(Tx("Share & tools"), Tx("Share your setup with friends, report bugs, install or remove."))
+    say(Tx("Settings code (your profile, timers, movement and look. No names or Discord links):"), "y+18")
+    c["CODE"] := add(UiEdit(g, "x" CX " y+4 w" CW " r2"))
+    cb1 := add(UiButton(g, "x" CX " y+8 w300", "📋 " Tx("Copy my code")))
+    cb1.OnEvent("Click", (*) => (c["CODE"].Value := ExportCode(), ShowTip(Tx("Copied. Send it to a friend."), 2500)))
+    cb2 := add(UiButton(g, "x+10 yp w300", "📥 " Tx("Use the pasted code")))
+    cb2.OnEvent("Click", (*) => SettingsImportCode(g, c["CODE"].Value))
+    add(UiText(g, "x" CX " y+22 w" CW, Tx("Tools"), "head"))
+    t1 := add(UiButton(g, "x" CX " y+8 w300", "🐞 " Tx("Report a bug")))
+    t1.OnEvent("Click", (*) => ReportBug())
+    t2 := add(UiButton(g, "x+10 yp w300", "📌 " Tx("Add shortcuts")))
+    t2.OnEvent("Click", (*) => InstallShortcuts())
+    t3 := add(UiButton(g, "x" CX " y+8 w300", "📊 " Tx("Stats dashboard")))
+    t3.OnEvent("Click", (*) => OpenDashboard())
+    t4 := add(UiButton(g, "x+10 yp w300", "🗑️ " Tx("Uninstall")))
+    t4.OnEvent("Click", (*) => (g.Destroy(), Uninstall()))
+
+    ; ---- bottom bar ----
+    g.Add("Text", "x" CX " y582 w" CW " h1 Background" UiCol("line"))
+    saveBtn := UiButton(g, "x" (CX + CW - 250) " y596 w120 Default", Tx("Save"))
+    saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
+    cancelBtn := UiButton(g, "x+10 yp w120", Tx("Cancel"))
+    cancelBtn.OnEvent("Click", (*) => g.Destroy())
+    g.OnEvent("Escape", (*) => g.Destroy())
+
+    SettingsNav(Min(Max(1, startPage), pages.Length), pages, navs)
+    g.Show("w" (CX + CW + 30) " h646")
+}
+
+SettingsTestClip(g, c) {
+    oldMethod := S["CLIP_METHOD"], oldKey := S["CLIP_KEY"]
+    S["CLIP_METHOD"] := ["gamebar", "nvidia", "custom"][c["CLIP_METHOD"].Value]
+    S["CLIP_KEY"] := Trim(c["CLIP_KEY"].Value)
+    ok := DoClip("test")
+    S["CLIP_METHOD"] := oldMethod, S["CLIP_KEY"] := oldKey
+    MsgBox(ok ? Tx("Clip key pressed. Check your recorder's folder for a new clip.") : Tx("Pick a clip method, or type your clip key first."), TITLE, "Iconi Owner" g.Hwnd)
+}
+
+ShowModeCheck(waitMs := 0) {
+    if waitMs {
+        ShowTip(Tx("Click into Fortnite. Checking in {1} seconds...", waitMs // 1000), waitMs - 300)
+        Sleep(waitMs)
+    }
+    m := ReadLobbyMode()
+    wanted := ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"])
+    if !IsObject(m)
+        rows := [["⚠️", Tx("Couldn't read the mode button. Open the Fortnite lobby first.")]]
+    else
+        rows := [[ModeOk(m) ? "✅" : "❌", Tx("Lobby is on: {1}", m.text)], ["•", Tx("You want: {1}", wanted), true]]
+    ShowCard("🎯 " Tx("Mode check"), rows, 8000)
+}
+
+SaveSettingsGui(g, c) {
+    global botLastId, botFails, watchMinutes
+    bad(msg) => MsgBox(msg, TITLE, "Icon! Owner" g.Hwnd)
+    num(key, label, lo, hi) {
+        v := Trim(c[key].Value)
+        if (v = "")
+            v := lo
+        if (!IsNumber(v) || v < lo || v > hi)
+            throw Error(Tx("'{1}' should be a number from {2} to {3}.", label, lo, hi))
+        return Number(v)
+    }
+    ; stop timer
+    str := Trim(c["STOP"].Value)
+    stopH := 0, stopM := 0, stopT := ""
+    if (str != "") {
+        if (ck := ParseClock(str))
+            stopT := Format("{:02}:{:02}", ck.h, ck.m)
+        else if (dur := ParseDuration(str))
+            stopH := dur.h, stopM := dur.m
+        else
+            return bad("Couldn't understand the stop time '" str "'.`n`nTry: 2h, 90m, 1h30m, 9:30 PM or 21:30")
+    }
+    startT := "", sumT := ""
+    if (Trim(c["START"].Value) != "") {
+        if !(ck2 := ParseClock(Trim(c["START"].Value)))
+            return bad("Couldn't understand the start time.`n`nTry: 2:00 AM or 14:30")
+        startT := Format("{:02}:{:02}", ck2.h, ck2.m)
+    }
+    if (Trim(c["SUMMARY"].Value) != "") {
+        if !(ck3 := ParseClock(Trim(c["SUMMARY"].Value)))
+            return bad("Couldn't understand the summary time.`n`nTry: 11:55 PM or 23:55")
+        sumT := Format("{:02}:{:02}", ck3.h, ck3.m)
+    }
+    hook := Trim(c["HOOK"].Value)
+    if (hook != "" && !IsDiscordUrl(hook))
+        return bad("That doesn't look like a Discord webhook link.`nIt should start with https://discord.com/api/webhooks/")
+    channel := Trim(c["CHANNEL"].Value)
+    if (channel != "" && !RegExMatch(channel, "^\d{15,22}$"))
+        return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
+    try {
+        nums := Map("MATCH_LIMIT", num("MATCH_LIMIT", Tx("Stop after this many matches (0 = no limit):"), 0, 10000),
+                    "FOLLOW_DROP_MIN", num("FOLLOW_DROP_MIN", Tx("...for the first this many minutes of a match:"), 0, 30),
+                    "HIDE_AFTER_MIN", num("HIDE_AFTER_MIN", Tx("...starting this many minutes into the match:"), 0, 60),
+                    "BREAK_EVERY_MIN", num("BREAK_EVERY_MIN", Tx("Every this many minutes:"), 10, 1440),
+                    "BREAK_MIN", num("BREAK_MIN", Tx("For about this many minutes:"), 1, 240),
+                    "READY_DELAY_MAX", num("READY_DELAY_MAX", Tx("Wait a random 1 to this many seconds before clicking Ready:"), 0, 120),
+                    "GAME_VOLUME", num("GAME_VOLUME", Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), 0, 100),
+                    "CLIP_DELAY", num("CLIP_DELAY", Tx("Wait (seconds)"), 0, 60),
+                    "AUTO_SCREENSHOT_MIN", num("AUTO_SCREENSHOT_MIN", Tx("Screenshot to Discord every (minutes, 0 = off):"), 0, 1440))
+    } catch as e {
+        return bad(e.Message)
+    }
+    oldStream := S["STREAM_HIDE"] ? 1 : 0
+    clipKey := Trim(c["CLIP_KEY"].Value)
+    if (clipKey != "" && !ValidHotkey(clipKey))
+        return bad("'" clipKey "' isn't a key Lobby Loop can press (examples: F8, ^!c, +F9).")
+    ; hotkeys and game keys
+    keysChanged := false
+    seenHk := Map()
+    for pair in HOTKEY_FIELDS {
+        v := Trim(c[pair[1]].Value)
+        if !ValidHotkey(v)
+            return bad("'" v "' can't be used as the " Tx(pair[2]) " key.`n`nExamples: F8, Insert, Numpad0, ^!s, +F8")
+        if seenHk.Has(StrLower(v))
+            return bad("'" v "' is used for two Lobby Loop keys. Pick a different key for one of them.")
+        seenHk[StrLower(v)] := true
+    }
+    for pair in GAMEKEY_FIELDS {
+        v := Trim(c[pair[1]].Value)
+        if (pair[1] = "KEY_SLOTS") {
+            for slot in StrSplit(v, ",", " `t")
+                if !ValidKey(slot)
+                    return bad("'" slot "' isn't a key name (weapon slots look like: 1,2,3,4,5).")
+        } else if !ValidKey(v) {
+            return bad("'" v "' isn't a key name AutoHotkey knows (examples: w, Space, LShift, LCtrl).")
+        }
+    }
+
+    ; profile first, then the values typed on this window win
+    newProfile := PROFILE_KEYS[c["PROFILE"].Value]
+    if (newProfile != S["PROFILE"])
+        ApplyProfile(newProfile)
+    if (hook != "" && hook != DiscordUrl())
+        SetupWebhook(hook)
+    SaveStop(stopH, stopM, stopT)
+    SetSetting("STOP_ACTION", ACTIONS[c["ACTION"].Value][1])
+    SetSetting("START_AT_TIME", startT)
+    SetSetting("DAILY_SUMMARY_TIME", sumT)
+    for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
+                "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "AUTO_CLAIM", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
+                "FOLLOW_DROP", "HIDE_MODE", "STAY_WITH_TEAM", "CHAT_START", "CHAT_GG", "BREAKS", "KEEP_AWAKE", "STREAM_HIDE",
+                "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
+                "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
+        if c.Has(key)
+            SetSetting(key, c[key].Value)
+    for key, v in nums
+        SetSetting(key, v)
+    for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS", "CHAT_START_TEXT", "CHAT_GG_TEXT"]
+        SetSetting(key, Trim(c[key].Value))
+    SetSetting("CLIP_KEY", clipKey)
+    SetSetting("CLIP_METHOD", ["gamebar", "nvidia", "custom"][c["CLIP_METHOD"].Value])
+    SetSetting("MODE_TEAM", ["any", "solo", "duo", "trio", "squad"][c["MODE_TEAM"].Value])
+    SetSetting("MODE_BUILD", ["any", "build", "zerobuild"][c["MODE_BUILD"].Value])
+    SetSetting("MODE_FILL", ["any", "fill", "nofill"][c["MODE_FILL"].Value])
+    SetSetting("MODE_ACTION", c["MODE_ACTION"].Value = 2 ? "ready" : "wait")
+    watchMinutes := nums["AUTO_SCREENSHOT_MIN"]
+    if (c["START_WITH_WINDOWS"].Value != (S["START_WITH_WINDOWS"] ? 1 : 0))
+        SetStartWithWindows(c["START_WITH_WINDOWS"].Value)
+    SetSetting("START_WITH_WINDOWS", c["START_WITH_WINDOWS"].Value)
+    SetSetting("PLAYER_NAME", Trim(c["PLAYER_NAME"].Value))
+    SetSetting("DISCORD_WEBHOOK", hook)
+    SetSetting("DISCORD_BOT_TOKEN", Trim(c["TOKEN"].Value))
+    SetSetting("DISCORD_CHANNEL_ID", channel)
+    SetSetting("DISCORD_ALLOWED_IDS", Trim(c["ALLOWED"].Value))
+    for pair in HOTKEY_FIELDS
+        if (Trim(c[pair[1]].Value) != String(S[pair[1]])) {
+            SetSetting(pair[1], Trim(c[pair[1]].Value))
+            keysChanged := true
+        }
+    for pair in GAMEKEY_FIELDS
+        if (Trim(c[pair[1]].Value) != String(S[pair[1]])) {
+            SetSetting(pair[1], Trim(c[pair[1]].Value))
+            keysChanged := true
+        }
+    newLang := (c["LANG"].Value = 2) ? "ar" : "en"
+    newTheme := (c["THEME"].Value = 2) ? "light" : "dark"
+    newSize := ["small", "normal", "large"][c["SIZE"].Value]
+    newStyle := (c["STYLE"].Value = 2) ? "mini" : "card"
+    newAccent := ["yellow", "purple", "cyan", "pink", "green"][c["ACCENT"].Value]
+    needReload := keysChanged || (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
+        || (newStyle != StrLower(S["OVERLAY_STYLE"])) || (newAccent != StrLower(S["ACCENT"])) || (oldStream != c["STREAM_HIDE"].Value)
+    SetSetting("OVERLAY_STYLE", newStyle)
+    SetSetting("ACCENT", newAccent)
+    SetSetting("LANG", newLang)
+    SetSetting("THEME", newTheme)
+    SetSetting("OVERLAY_SIZE", newSize)
+    SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right", "custom"][c["CORNER"].Value])
+    g.Destroy()
+    botLastId := "", botFails := 0
+    if running {
+        ApplyStopLimits()
+        KeepAwake(S["KEEP_AWAKE"])
+        if !S["MUTE_WHILE_RUNNING"]
+            SetGameVolume(S["GAME_VOLUME"])
+    }
+    ApplyStartSchedule()
+    PlaceOverlay()
+    Log("Settings saved. Profile: " S["PROFILE"] ", mode: " ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"]) ", stop: " DescribeStop())
+    if needReload {
+        Reload()
+        return
+    }
+    ShowTip(Tx("Saved.") "`n" Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
 }
