@@ -3,11 +3,11 @@
 ; Words are separated by commas. Start a word with ! to count it without Fortnite's YOU FOUND banner.
 ; Weekly prizes: prizes_<week>=Name|Type;Name|Type...   (names from https://fnchesttracker.com/tracker)
 ; Fortnite: Treasure Hunters (1 Nov - about 5 Dec 2026)
-version=2026-11-18b
+version=2026-11-19-auto
 banner=YOU FOUND,TREASURE FOUND
 token=PIRATE SHOP ACCESS,SHOP ACCESS,!PIRATE SHOP ACCESS UNLOCKED
 gizmo=SPRITE LOCATOR,LUCKY LOCATOR,GOLDEN FIREWORK,EXTRACTION ACCELERATOR,PORTABLE EXTRACTOR
-cosmetic=SOLID GOLD,NO TRESPASSING,PLUNDER IN PARADISE,G-WAGON,DIAMOND AND GOLD,LONDON,SO KAWAII,CADILLAC,TAKARABAKO,PPPP,MAY FORTUNE FIND YOU,CORVETTE
+cosmetic=SOLID GOLD,NO TRESPASSING,PLUNDER IN PARADISE,G-WAGON,DIAMOND AND GOLD,LONDON,SO KAWAII,CADILLAC,TAKARABAKO,PPPP,MAY FORTUNE FIND YOU,CORVETTE,MIKU,MIKU'S TAKARABAKO,GOLD CHEVROLET CORVETTE ZR1,A$AP ROCKY,RUGAHAND,GOLD G-WAGON,LIL UZI VERT,GOLD CADILLAC CT5-V BLACKWING
 week=3
 prizes_1=Solid Gold A$AP Rocky|Outfit;Solid Gold Rugahand|Pickaxe;No Trespassing|Jam Track;Plunder in Paradise|Loading screen;Gold G-Wagon|Car
 prizes_2=Solid Gold Lil Uzi Vert|Outfit;Diamond and Gold|Back bling;London|Jam Track;So Kawaii|Loading screen;Gold Cadillac CT5-V Blackwing|Car
