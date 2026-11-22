@@ -5165,11 +5165,11 @@ OpenSettings(startPage := 1) {
     }
     newPage(title, sub := "") {
         pages.Push([])
-        add(UiText(g, "x" CX " y22 w" CW, title, "title"))
+        add(UiText(g, "x" CX " y22 w" CW, (pages.Length <= sections.Length ? sections[pages.Length][1] "  " : "") title, "title"))
         if (sub != "")
             add(UiText(g, "x" CX " y+2 w" CW, sub, "muted"))
     }
-    tick(key, label, opts := "y+8", width := 0) => (c[key] := addAll(UiCheck(g, "x" CX " " opts, Tx(label), S[key], width ? width : CW - 30)))
+    tick(key, label, opts := "y+8", width := 0) => (c[key] := addAll(UiCheck(g, "x" CX " " opts, KeyIcon(key) Tx(label), S[key], width ? width : CW - 30)))
     say(text, opts := "y+12", width := 0) => add(UiText(g, "x" CX " " opts " w" (width ? width : CW), text))
     hint(text, opts := "y+3") => add(UiText(g, "x" CX " " opts " w" CW, text, "muted"))
     lobbyNote(opts) {
@@ -5191,25 +5191,25 @@ OpenSettings(startPage := 1) {
 
     ; ---- 1. Play ----
     newPage(Tx("Play"), Tx("Lobby Loop keeps you in squad fills while you're away, so your teammates can farm chests for you while you bot."))
-    say(Tx("Profile"), "y+16")
+    say(Ico("Profile"), "y+16")
     c["PROFILE"] := add(UiDDL(g, "x" CX " y+4 w300", [ProfileLabel("overnight"), ProfileLabel("quick"), ProfileLabel("chill"), ProfileLabel("custom")]))
     c["PROFILE"].Choose(ProfileIndex(S["PROFILE"]))
-    say(Tx("Stop after a time, or at a clock time:"), "y+14")
+    say(Ico("Stop after a time, or at a clock time:"), "y+14")
     c["STOP"] := add(UiEdit(g, "x" CX " y+4 w300 r1", CurrentStopText()))
     hint(Tx("e.g.   2h    90m    1h30m    9:30 PM    21:30      (blank = never)"))
-    say(Tx("When it stops:"), "y+12")
+    say(Ico("When it stops:"), "y+12")
     c["ACTION"] := add(UiDDL(g, "x" CX " y+4 w300", ActionLabels()))
     c["ACTION"].Choose(ActionIndex(S["STOP_ACTION"]))
     hint(Tx("Close / sleep / shut down wait 30 s first. Press {1} to cancel.", HK_TOGGLE))
-    say(Tx("After a match:"), "y+12")
+    say(Ico("After a match:"), "y+12")
     am := add(UiDDL(g, "x" CX " y+4 w300", [Tx("Play Again (faster)"), Tx("Return to lobby (shows prizes)")]))
     am.Choose(S["LOBBY_AFTER_MATCH"] ? 2 : 1)
     am.OnEvent("Change", (*) => UpdateLobbyNotes(lobbyNotes, am.Value = 2))
     c["LOBBY_AFTER_MATCH"] := am
     hint(Tx("Prize banners and claim screens only show in the lobby, so treasure needs Return to lobby."))
-    say(Tx("Stop after this many matches (0 = no limit):"), "y+12")
+    say(Ico("Stop after this many matches (0 = no limit):"), "y+12")
     edit("MATCH_LIMIT", "y+4 w120")
-    say(Tx("Your name (for Discord and the leaderboard):"), "y+12")
+    say(Ico("Your name (for Discord and the leaderboard):"), "y+12")
     c["PLAYER_NAME"] := add(UiEdit(g, "x" CX " y+4 w300 r1", PlayerName()))
     op := add(UiButton(g, "x" CX " y+18 w300", "🌙 " Tx("Overnight treasure farm (one click)")))
     op.OnEvent("Click", (*) => ApplyOvernightPreset(g))
@@ -5218,15 +5218,15 @@ OpenSettings(startPage := 1) {
 
     ; ---- 2. Mode ----
     newPage(Tx("Mode"), Tx("Before readying up, Lobby Loop reads the mode button in the lobby (for example 'Build, Squad, Fill')."))
-    say(Tx("Team size"), "y+16 Section", 280)
+    say(Ico("Team size"), "y+16 Section", 280)
     choice("MODE_TEAM", [Tx("Any"), "Solo", "Duo", "Trio", "Squad"], ["any", "solo", "duo", "trio", "squad"], "y+4 w260")
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("Build")))
+    add(UiText(g, "xs+" COL2 " ys w280", Ico("Build")))
     d := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Any"), "Build", "Zero Build"]))
     d.Choose(StrLower(S["MODE_BUILD"]) = "build" ? 2 : StrLower(S["MODE_BUILD"]) = "zerobuild" ? 3 : 1)
     c["MODE_BUILD"] := d
-    say(Tx("Fill"), "y+16 Section", 280)
+    say(Ico("Fill"), "y+16 Section", 280)
     choice("MODE_FILL", [Tx("Any"), "Fill", Tx("No fill")], ["any", "fill", "nofill"], "y+4 w260")
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("If the mode is wrong")))
+    add(UiText(g, "xs+" COL2 " ys w280", Ico("If the mode is wrong")))
     d2 := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Wait and tell me"), Tx("Ready up anyway")]))
     d2.Choose(StrLower(S["MODE_ACTION"]) = "ready" ? 2 : 1)
     c["MODE_ACTION"] := d2
@@ -5244,7 +5244,7 @@ OpenSettings(startPage := 1) {
     hint(Tx("Best: in Fortnite go to Settings > Game > Energy Saving and set Sleep Mode to Never."))
     tick("AUTO_CLAIM", "Click reward buttons (Continue, Collect, Claim...)", "y+8")
     hint(Tx("Turn on Settings > Treasure to get told when you get gizmos, treasure cosmetics or pirate tokens."), "y+16")
-    tfa := UiCheck(g, "x" CX " y+14", Tx("Team Fill check: make sure Fill is on before every queue"), StrLower(S["MODE_FILL"]) = "fill", CW - 30)
+    tfa := UiCheck(g, "x" CX " y+14", Ico("Team Fill check: make sure Fill is on before every queue"), StrLower(S["MODE_FILL"]) = "fill", CW - 30)
     tfc := addAll(tfa)
     tfc.OnEvent("Click", (*) => c["MODE_FILL"].Choose(tfc.Value ? 2 : 1))
     tfa[2].OnEvent("Click", (*) => c["MODE_FILL"].Choose(tfc.Value ? 2 : 1))
@@ -5258,21 +5258,21 @@ OpenSettings(startPage := 1) {
 
     ; ---- 4. Schedule ----
     newPage(Tx("Schedule"), Tx("Start by itself, every day or with Windows."))
-    say(Tx("Start every day at:"), "y+16")
+    say(Ico("Start every day at:"), "y+16")
     c["START"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["START_AT_TIME"])))
     hint(Tx("e.g.   2:00 AM    14:30      (blank = off, Fortnite must be logged in)"))
     tick("AUTO_START", "Start by itself when I click into Fortnite", "y+14")
     tick("LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)")
     tick("CHECK_SERVERS", "Check Fortnite's servers first (wait during outages)")
     tick("START_WITH_WINDOWS", "Start with Windows")
-    say(Tx("Fresh restart: restart Fortnite every this many hours, between matches (0 = off):"), "y+14")
+    say(Ico("Fresh restart: restart Fortnite every this many hours, between matches (0 = off):"), "y+14")
     edit("FRESH_RESTART_HOURS", "y+4 w120")
     hint(Tx("Keeps Fortnite running smoothly overnight. It never restarts during a match."))
 
     ; ---- 5. Extras ----
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
     tick("MUTE_WHILE_RUNNING", "Mute Fortnite while running", "y+16")
-    say(Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), "y+6")
+    say(Ico("Or set Fortnite's volume while running (0-100, 100 = leave it):"), "y+6")
     edit("GAME_VOLUME", "y+4 w120")
     tick("BLACKOUT_ON_START", "Dim the screen while running", "y+12")
     tick("KEEP_AWAKE", "Keep the PC awake while running")
@@ -5283,35 +5283,35 @@ OpenSettings(startPage := 1) {
     tick("FPS_SAVER", "FPS saver: Fortnite at 30 FPS while running (yours comes back after)", "y+12")
     hint(Tx("Starts the next time Lobby Loop opens Fortnite. Your FPS comes back once Fortnite closes after the run."))
     tick("BATTERY_GUARD", "Laptop: stop when the battery is low", "y+12")
-    say(Tx("Battery % that counts as low:"), "y+4 Section", 280)
+    say(Ico("Battery % that counts as low:"), "y+4 Section", 280)
     edit("BATTERY_MIN", "y+4 w120")
-    c["BATTERY_SLEEP"] := addAll(UiCheck(g, "xs+" COL2 " ys+22", Tx("Also put the PC to sleep"), S["BATTERY_SLEEP"], 260))
+    c["BATTERY_SLEEP"] := addAll(UiCheck(g, "xs+" COL2 " ys+22", Ico("Also put the PC to sleep"), S["BATTERY_SLEEP"], 260))
     hint(WindowModeText(), "y+16")
 
     ; ---- 6. Treasure ----
     newPage(Tx("Treasure"), Tx("Spots the prizes your squad finds in chests, and keeps them safe."))
     tick("WATCH_TREASURE", "Watch for treasure", "y+12")
     tick("TREASURE_ONLINE", "Get the newest words online (weekly prize names)", "y+6")
-    add(UiText(g, "x" CX " y+12 w300 Section", Tx("What to look for"), "head"))
+    add(UiText(g, "x" CX " y+12 w300 Section", Ico("What to look for"), "head"))
     lobbyNote("xs y+2")
-    add(UiText(g, "xs y+8 w300", Tx("Prize banner (must be on screen)")))
+    add(UiText(g, "xs y+8 w300", Ico("Prize banner (must be on screen)")))
     c["TREASURE_FOUND_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_FOUND_WORDS"]))
     for item in [["TREASURE_TOKEN", "Pirate Shop Access (pirate token)"], ["TREASURE_GIZMO", "Gizmos (Sprite Locator, Lucky Locator...)"],
                  ["TREASURE_COSMETIC", "Treasure (any other prize)"]] {
-        c[item[1]] := addAll(UiCheck(g, "xs y+9", Tx(item[2]), S[item[1]], 280))
+        c[item[1]] := addAll(UiCheck(g, "xs y+9", Ico(item[2]), S[item[1]], 280))
         c[item[1] "_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S[item[1] "_WORDS"]))
     }
-    add(UiText(g, "xs y+9 w300", Tx("My own words")))
+    add(UiText(g, "xs y+9 w300", Ico("My own words")))
     c["TREASURE_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_WORDS"]))
     add(UiText(g, "xs y+4 w300", Tx("Separate words with commas. Start a word with ! to count it without the banner."), "muted"))
-    add(UiText(g, "xs+" COL2 " ys w300", Tx("Keep it safe"), "head"))
+    add(UiText(g, "xs+" COL2 " ys w300", Ico("Keep it safe"), "head"))
     lobbyNote("xs+" COL2 " y+2")
-    add(UiText(g, "xs+" COL2 " y+8 w300", Tx("Stop after the match when I find:")))
+    add(UiText(g, "xs+" COL2 " y+8 w300", Ico("Stop after the match when I find:")))
     st := add(UiDDL(g, "xs+" COL2 " y+4 w300", [Tx("Never"), Tx("Pirate Shop Access"), Tx("Any treasure")]))
     st.Choose(StrLower(S["TREASURE_STOP"]) = "token" ? 2 : StrLower(S["TREASURE_STOP"]) = "any" ? 3 : 1)
     c["TREASURE_STOP"] := st
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Then it does your stop action (Settings > Play)."), "muted"))
-    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("Lobby proof: screenshot the prize screen, then click Claim"), S["TREASURE_PROOF"], 276))
+    c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Ico("Lobby proof: screenshot the prize screen, then click Claim"), S["TREASURE_PROOF"], 276))
     uw := add(UiButton(g, "xs+" COL2 " y+10 w300", "🌐 " Tx("Update the words now")))
     uw.OnEvent("Click", (*) => SettingsUpdateWords(g))
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Online words: {1}", S["TREASURE_ONLINE_VERSION"] != "" ? S["TREASURE_ONLINE_VERSION"] : Tx("not downloaded yet")), "muted"))
@@ -5326,43 +5326,43 @@ OpenSettings(startPage := 1) {
 
     ; ---- 7. Alerts & clips ----
     newPage(StrReplace(Tx("Alerts & clips"), "&", "&&"), Tx("What happens when treasure is found."))
-    add(UiText(g, "x" CX " y+16 w300 Section", Tx("When I find treasure"), "head"))
+    add(UiText(g, "x" CX " y+16 w300 Section", Ico("When I find treasure"), "head"))
     lobbyNote("xs y+2")
     first := true
     for item in [["TREASURE_NOTIFY", "Windows notification"], ["TREASURE_BEEP", "Play a sound"], ["TREASURE_DISCORD", "Tell Discord"],
                  ["TREASURE_SCREENSHOT", "Add a screenshot"], ["TREASURE_CLIP", "Save a clip (20 s before + 5 s after)"]] {
-        c[item[1]] := addAll(UiCheck(g, "xs" (first ? " y+10" : " y+8"), Tx(item[2]), S[item[1]], 270))
+        c[item[1]] := addAll(UiCheck(g, "xs" (first ? " y+10" : " y+8"), Ico(item[2]), S[item[1]], 270))
         first := false
     }
-    add(UiText(g, "xs+" COL2 " ys w300", Tx("Clips"), "head"))
-    add(UiText(g, "xs+" COL2 " y+10 w300", Tx("Clip with")))
+    add(UiText(g, "xs+" COL2 " ys w300", Ico("Clips"), "head"))
+    add(UiText(g, "xs+" COL2 " y+10 w300", Ico("Clip with")))
     cm := add(UiDDL(g, "xs+" COL2 " y+4 w300", [Tx("Windows Game Bar (Win+Alt+G)"), Tx("NVIDIA (Alt+F10)"), Tx("My own clip key (Medal, OBS...)")]))
     cm.Choose(StrLower(S["CLIP_METHOD"]) = "nvidia" ? 2 : StrLower(S["CLIP_METHOD"]) = "custom" ? 3 : 1)
     c["CLIP_METHOD"] := cm
-    add(UiText(g, "xs+" COL2 " y+8 w145", Tx("Clip key")))
-    add(UiText(g, "x+10 yp w145", Tx("Wait (seconds)")))
+    add(UiText(g, "xs+" COL2 " y+8 w145", Ico("Clip key")))
+    add(UiText(g, "x+10 yp w145", Ico("Wait (seconds)")))
     c["CLIP_KEY"] := add(UiEdit(g, "xs+" COL2 " y+4 w145 r1", S["CLIP_KEY"]))
     c["CLIP_DELAY"] := add(UiEdit(g, "x+10 yp w145 r1", S["CLIP_DELAY"]))
-    c["CLIP_UPLOAD"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Tx("Send the clip to Discord (if under 10 MB)"), S["CLIP_UPLOAD"], 270))
+    c["CLIP_UPLOAD"] := addAll(UiCheck(g, "xs+" COL2 " y+8", Ico("Send the clip to Discord (if under 10 MB)"), S["CLIP_UPLOAD"], 270))
     add(UiText(g, "xs+" COL2 " y+6 w300", Tx("Set your recorder's clip length to 25 seconds (Game Bar: 30)."), "muted"))
-    add(UiText(g, "x" CX " y380 w" CW, Tx("Tools"), "head"))
+    add(UiText(g, "x" CX " y380 w" CW, Ico("Tools"), "head"))
     rb := add(UiButton(g, "x" CX " y+8 w250", "🔎 " Tx("Read the screen now")))
     rb.OnEvent("Click", (*) => (g.Destroy(), ShowScreenText(4000)))
     tc := add(UiButton(g, "x+10 yp w200", "🎬 " Tx("Test the clip key")))
     tc.OnEvent("Click", (*) => SettingsTestClip(g, c))
     pf := add(UiButton(g, "x" CX " y+8 w250", "📁 " Tx("Open proof screenshots")))
     pf.OnEvent("Click", (*) => (DirCreate(DATA_DIR "\" BASE "_treasure_proof"), Run(DATA_DIR "\" BASE "_treasure_proof")))
-    add(UiText(g, "x" CX " y+18 w" CW, Tx("Recent finds"), "head"))
+    add(UiText(g, "x" CX " y+18 w" CW, Ico("Recent finds"), "head"))
     add(UiText(g, "x" CX " y+2 w" CW " r3", RecentTreasureText(3), "muted"))
 
     ; ---- 7. Hotkeys ----
     newPage(Tx("Hotkeys"), Tx("Change the keys if they clash with your game or keyboard."))
-    add(UiText(g, "x" CX " y+16 w280 Section", Tx("Lobby Loop keys"), "head"))
+    add(UiText(g, "x" CX " y+16 w280 Section", Ico("Lobby Loop keys"), "head"))
     for i, pair in HOTKEY_FIELDS {
         add(UiText(g, "xs y+" (i = 1 ? 10 : 8) " w170", Tx(pair[2])))
         c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w100 r1", S[pair[1]]))
     }
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("Your Fortnite keys"), "head"))
+    add(UiText(g, "xs+" COL2 " ys w280", Ico("Your Fortnite keys"), "head"))
     for i, pair in GAMEKEY_FIELDS {
         add(UiText(g, "xs+" COL2 " y+" (i = 1 ? 10 : 8) " w150", Tx(pair[2])))
         c[pair[1]] := add(UiEdit(g, "x+5 yp-3 w120 r1", S[pair[1]]))
@@ -5390,7 +5390,7 @@ OpenSettings(startPage := 1) {
 
     ; ---- 9. Discord alerts ----
     newPage(Tx("Discord alerts"), Tx("Messages, screenshots and a daily summary in your channel."))
-    say(Tx("Discord alert link (optional):"), "y+16")
+    say(Ico("Discord alert link (optional):"), "y+16")
     c["HOOK"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", DiscordUrl()))
     tb := add(UiButton(g, "x" CX " y+10 w220", Tx("Send test message")))
     tb.OnEvent("Click", (*) => TestDiscord(c["HOOK"].Value, g))
@@ -5398,17 +5398,17 @@ OpenSettings(startPage := 1) {
     hb.OnEvent("Click", (*) => ShowGuide("webhook", g.Hwnd))
     tick("SCREENSHOT_EVERY_MATCH", "Screenshot to Discord after every match", "y+16")
     tick("LIVE_STATUS", "Live status message (shows when the PC went offline)")
-    say(Tx("Daily Discord summary at (blank = off):"), "y+14 Section", 280)
+    say(Ico("Daily Discord summary at (blank = off):"), "y+14 Section", 280)
     c["SUMMARY"] := add(UiEdit(g, "x" CX " y+4 w200 r1", ClockText(S["DAILY_SUMMARY_TIME"])))
-    add(UiText(g, "xs+" COL2 " ys w300", Tx("Screenshot to Discord every (minutes, 0 = off):")))
+    add(UiText(g, "xs+" COL2 " ys w300", Ico("Screenshot to Discord every (minutes, 0 = off):")))
     c["AUTO_SCREENSHOT_MIN"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["AUTO_SCREENSHOT_MIN"]))
     tick("WEEKLY_RECAP", "Weekly recap on Sundays at 8 PM", "y+14")
-    say(Tx("Friends leaderboard: webhook link of a shared channel (optional)"), "y+12")
+    say(Ico("Friends leaderboard: webhook link of a shared channel (optional)"), "y+12")
     c["LEADERBOARD_WEBHOOK"] := add(UiEdit(g, "x" CX " y+4 w" (CW - 170) " r1", S["LEADERBOARD_WEBHOOK"]))
     lbb := add(UiButton(g, "x+10 yp-2 w160", "🏆 " Tx("Post my card")))
     lbb.OnEvent("Click", (*) => (SetSetting("LEADERBOARD_WEBHOOK", Trim(c["LEADERBOARD_WEBHOOK"].Value)), ShowTip(LbCardUpdate(true) ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500)))
     hint(Tx("Everyone pastes the same link. Each PC keeps one card there and updates it. !lb ranks everyone if your bot can see that channel."))
-    say(Tx("Phone push with the free ntfy app: topic name (optional)"), "y+12")
+    say(Ico("Phone push with the free ntfy app: topic name (optional)"), "y+12")
     c["NTFY_TOPIC"] := add(UiEdit(g, "x" CX " y+4 w" (CW - 170) " r1", S["NTFY_TOPIC"]))
     ntb := add(UiButton(g, "x+10 yp-2 w160", "📲 " Tx("Test push")))
     ntb.OnEvent("Click", (*) => (SetSetting("NTFY_TOPIC", Trim(c["NTFY_TOPIC"].Value)), ShowTip(NtfyPush("Test", "Test push from " PlayerName() "'s Lobby Loop", 3) ? Tx("Sent") : Tx("Couldn't send"), 2500)))
@@ -5418,11 +5418,11 @@ OpenSettings(startPage := 1) {
     newPage(Tx("Phone control"), Tx("Control Lobby Loop from Discord on your phone (optional)."))
     hb2 := add(UiButton(g, "x" CX " y+14 w260", "❓ " Tx("How do I set this up?")))
     hb2.OnEvent("Click", (*) => ShowGuide("bot", g.Hwnd))
-    say(Tx("Bot token"), "y+14")
+    say(Ico("Bot token"), "y+14")
     c["TOKEN"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1 Password", S["DISCORD_BOT_TOKEN"]))
-    say(Tx("Channel ID"), "y+12")
+    say(Ico("Channel ID"), "y+12")
     c["CHANNEL"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_CHANNEL_ID"]))
-    say(Tx("Your Discord user ID (only you can control it)"), "y+12")
+    say(Ico("Your Discord user ID (only you can control it)"), "y+12")
     c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
     pb := add(UiButton(g, "x" CX " y+14 w260", "🎛️ " Tx("Post the control panel")))
     pb.OnEvent("Click", (*) => ShowTip(PanelCreate() ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500))
@@ -5430,37 +5430,37 @@ OpenSettings(startPage := 1) {
 
     ; ---- 11. Look ----
     newPage(Tx("Look"), Tx("Language, theme and the status box."))
-    add(UiText(g, "x" CX " y+18 w280 Section", Tx("Language")))
+    add(UiText(g, "x" CX " y+18 w280 Section", Ico("Language")))
     c["LANG"] := add(UiDDL(g, "xs y+4 w260", ["English", "العربية"]))
     c["LANG"].Choose(IsArabic() ? 2 : 1)
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("Theme")))
+    add(UiText(g, "xs+" COL2 " ys w280", Ico("Theme")))
     c["THEME"] := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Dark"), Tx("Light")]))
     c["THEME"].Choose(DarkOn() ? 1 : 2)
-    add(UiText(g, "xs y+16 w280 Section", Tx("Accent colour")))
+    add(UiText(g, "xs y+16 w280 Section", Ico("Accent colour")))
     c["ACCENT"] := add(UiDDL(g, "xs y+4 w260", [Tx("Yellow"), Tx("Purple"), Tx("Cyan"), Tx("Pink"), Tx("Green")]))
     ai := 1
     for i, k in ["yellow", "purple", "cyan", "pink", "green"]
         if (k = StrLower(S["ACCENT"]))
             ai := i
     c["ACCENT"].Choose(ai)
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("Status box style")))
+    add(UiText(g, "xs+" COL2 " ys w280", Ico("Status box style")))
     c["STYLE"] := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Card"), Tx("Mini")]))
     c["STYLE"].Choose(StrLower(S["OVERLAY_STYLE"]) = "mini" ? 2 : 1)
-    add(UiText(g, "xs y+16 w280 Section", Tx("Status box corner")))
+    add(UiText(g, "xs y+16 w280 Section", Ico("Status box corner")))
     c["CORNER"] := add(UiDDL(g, "xs y+4 w260", [Tx("Top left"), Tx("Top right"), Tx("Bottom left"), Tx("Bottom right"), Tx("Where I dragged it")]))
     ci := 1
     for i, k in ["top-left", "top-right", "bottom-left", "bottom-right", "custom"]
         if (k = StrLower(S["OVERLAY_CORNER"]))
             ci := i
     c["CORNER"].Choose(ci)
-    add(UiText(g, "xs+" COL2 " ys w280", Tx("Status box size")))
+    add(UiText(g, "xs+" COL2 " ys w280", Ico("Status box size")))
     c["SIZE"] := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Small"), Tx("Normal"), Tx("Large")]))
     si := 2
     for i, k in ["small", "normal", "large"]
         if (k = StrLower(S["OVERLAY_SIZE"]))
             si := i
     c["SIZE"].Choose(si)
-    add(UiText(g, "xs y+16 w280 Section", Tx("Fortnite's screen")))
+    add(UiText(g, "xs y+16 w280 Section", Ico("Fortnite's screen")))
     monItems := [Tx("Find it by itself")]
     loop MonitorGetCount() {
         MonitorGet(A_Index, &ml, &mt, &mr, &mb)
@@ -5468,23 +5468,23 @@ OpenSettings(startPage := 1) {
     }
     c["GAME_MONITOR"] := add(UiDDL(g, "xs y+4 w260", monItems))
     c["GAME_MONITOR"].Choose(Min(Integer(S["GAME_MONITOR"]) + 1, monItems.Length))
-    c["SHOW_OVERLAY"] := addAll(UiCheck(g, "xs y+18", Tx("Show the status box") "  (" HK_OVERLAY ")", !overlayHidden, 260))
+    c["SHOW_OVERLAY"] := addAll(UiCheck(g, "xs y+18", Ico("Show the status box") "  (" HK_OVERLAY ")", !overlayHidden, 260))
     mv := add(UiButton(g, "xs+" COL2 " yp-4 w260", "✋ " Tx("Move status box")))
     mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
 
     ; ---- 13. Storage ----
     newPage(Tx("Storage"), Tx("Where Lobby Loop keeps its files, and cleaning up."))
-    say(Tx("Data folder:"), "y+16")
+    say(Ico("Data folder:"), "y+16")
     hint(DATA_DIR)
     df := add(UiButton(g, "x" CX " y+6 w260", "📁 " Tx("Open the data folder")))
     df.OnEvent("Click", (*) => Run(DATA_DIR))
-    say(Tx("Delete match lists older than this many days (0 = keep, treasure finds are always kept):"), "y+16")
+    say(Ico("Delete match lists older than this many days (0 = keep, treasure finds are always kept):"), "y+16")
     edit("CLEAN_DAYS", "y+4 w120")
-    say(Tx("Delete proof screenshots older than this many days (0 = keep forever):"), "y+12")
+    say(Ico("Delete proof screenshots older than this many days (0 = keep forever):"), "y+12")
     edit("CLEAN_PROOF_DAYS", "y+4 w120")
-    say(Tx("Keep the log under (MB):"), "y+12 Section", 280)
+    say(Ico("Keep the log under (MB):"), "y+12 Section", 280)
     edit("LOG_MAX_MB", "y+4 w120")
-    add(UiText(g, "xs+" COL2 " ys w300", Tx("Warn when a drive has less than (GB, 0 = off):")))
+    add(UiText(g, "xs+" COL2 " ys w300", Ico("Warn when a drive has less than (GB, 0 = off):")))
     c["DISK_MIN_GB"] := add(UiEdit(g, "xs+" COL2 " y+4 w120 r1", S["DISK_MIN_GB"]))
     cn := add(UiButton(g, "x" CX " y+16 w260", "🧹 " Tx("Clean now")))
     cn.OnEvent("Click", (*) => CleanData(true))
@@ -5495,13 +5495,13 @@ OpenSettings(startPage := 1) {
 
     ; ---- 14. Share & tools ----
     newPage(StrReplace(Tx("Share & tools"), "&", "&&"), Tx("Share your setup with friends, report bugs, install or remove."))
-    say(Tx("Settings code (your profile, timers, movement and look. No names or Discord links):"), "y+18")
+    say(Ico("Settings code (your profile, timers, movement and look. No names or Discord links):"), "y+18")
     c["CODE"] := add(UiEdit(g, "x" CX " y+4 w" CW " r2"))
     cb1 := add(UiButton(g, "x" CX " y+8 w300", "📋 " Tx("Copy my code")))
     cb1.OnEvent("Click", (*) => (c["CODE"].Value := ExportCode(), ShowTip(Tx("Copied. Send it to a friend."), 2500)))
     cb2 := add(UiButton(g, "x+10 yp w300", "📥 " Tx("Use the pasted code")))
     cb2.OnEvent("Click", (*) => SettingsImportCode(g, c["CODE"].Value))
-    add(UiText(g, "x" CX " y+22 w" CW, Tx("Tools"), "head"))
+    add(UiText(g, "x" CX " y+22 w" CW, Ico("Tools"), "head"))
     t1 := add(UiButton(g, "x" CX " y+8 w300", "🐞 " Tx("Report a bug")))
     t1.OnEvent("Click", (*) => ReportBug())
     t2 := add(UiButton(g, "x+10 yp w300", "📌 " Tx("Add shortcuts")))
@@ -7173,4 +7173,103 @@ PhoneSet(arg, authorId, who) {
         return Discord(who "✅ " key " **" (o ? "on" : "off") "**")
     }
     Discord(who "I don't know ``" key "``.`n" list)
+}
+
+; ============================================================
+; v7.9: icons next to every setting
+; ============================================================
+Ico(text) {
+    static icons := Map(
+        "Profile", "🎚️",
+        "Stop after a time, or at a clock time:", "⏹️",
+        "When it stops:", "🔚",
+        "After a match:", "🏁",
+        "Stop after this many matches (0 = no limit):", "🔢",
+        "Your name (for Discord and the leaderboard):", "🏷️",
+        "Team size", "👥",
+        "Build", "🧱",
+        "Fill", "➕",
+        "If the mode is wrong", "⚠️",
+        "Start every day at:", "⏰",
+        "Fresh restart: restart Fortnite every this many hours, between matches (0 = off):", "🔄",
+        "Or set Fortnite's volume while running (0-100, 100 = leave it):", "🔊",
+        "Battery % that counts as low:", "🔋",
+        "Discord alert link (optional):", "🔗",
+        "Daily Discord summary at (blank = off):", "📰",
+        "Screenshot to Discord every (minutes, 0 = off):", "📸",
+        "Friends leaderboard: webhook link of a shared channel (optional)", "🏆",
+        "Phone push with the free ntfy app: topic name (optional)", "📲",
+        "Bot token", "🔑",
+        "Channel ID", "#️⃣",
+        "Your Discord user ID (only you can control it)", "🆔",
+        "Data folder:", "📁",
+        "Delete match lists older than this many days (0 = keep, treasure finds are always kept):", "🗂️",
+        "Delete proof screenshots older than this many days (0 = keep forever):", "🖼️",
+        "Keep the log under (MB):", "📜",
+        "Warn when a drive has less than (GB, 0 = off):", "💾",
+        "Settings code (your profile, timers, movement and look. No names or Discord links):", "📋",
+        "Prize banner (must be on screen)", "🪧",
+        "My own words", "✍️",
+        "Clip with", "🎥",
+        "Clip key", "⌨️",
+        "Wait (seconds)", "⏳",
+        "Stop after the match when I find:", "🛑",
+        "Language", "🌐",
+        "Theme", "🌓",
+        "Accent colour", "🎨",
+        "Status box style", "🪟",
+        "Status box corner", "📐",
+        "Status box size", "🔍",
+        "Fortnite's screen", "🖥️",
+        "What to look for", "🔎",
+        "Keep it safe", "🛡️",
+        "When I find treasure", "🔔",
+        "Clips", "🎬",
+        "Lobby Loop keys", "⌨️",
+        "Your Fortnite keys", "🎮",
+        "Tools", "🧰",
+        "Recent finds", "🕘",
+        "Pirate Shop Access (pirate token)", "🏴‍☠️",
+        "Gizmos (Sprite Locator, Lucky Locator...)", "🧭",
+        "Treasure (any other prize)", "💎",
+        "Windows notification", "🪟",
+        "Play a sound", "🔊",
+        "Tell Discord", "💬",
+        "Add a screenshot", "📸",
+        "Save a clip (20 s before + 5 s after)", "🎬",
+        "Team Fill check: make sure Fill is on before every queue", "➕",
+        "Also put the PC to sleep", "😴",
+        "Lobby proof: screenshot the prize screen, then click Claim", "🧾",
+        "Send the clip to Discord (if under 10 MB)", "📤",
+        "Show the status box", "👁️")
+    return (icons.Has(text) ? icons[text] "  " : "") Tx(text)
+}
+
+KeyIcon(key) {
+    static icons := Map(
+        "MODE_SWITCH", "🔀",
+        "SPECTATE_IDLE", "👻",
+        "WAIT_FOR_SQUAD", "⏸️",
+        "WAKE_FROM_SLEEP", "😴",
+        "AUTO_CLAIM", "🎁",
+        "EMPTY_SQUAD", "🚪",
+        "AUTO_START", "▶️",
+        "LAUNCH_FORTNITE", "🚀",
+        "CHECK_SERVERS", "🛰️",
+        "START_WITH_WINDOWS", "🪟",
+        "MUTE_WHILE_RUNNING", "🔇",
+        "BLACKOUT_ON_START", "🌙",
+        "KEEP_AWAKE", "☕",
+        "READ_RESULTS", "🏅",
+        "NOTIFY", "🔔",
+        "STREAM_HIDE", "🙈",
+        "FPS_SAVER", "🐢",
+        "BATTERY_GUARD", "🔋",
+        "WATCH_TREASURE", "🏴‍☠️",
+        "TREASURE_ONLINE", "🌐",
+        "KNOWN_POPUPS", "🧩",
+        "SCREENSHOT_EVERY_MATCH", "📸",
+        "LIVE_STATUS", "📡",
+        "WEEKLY_RECAP", "🗓️")
+    return icons.Has(key) ? icons[key] "  " : ""
 }
