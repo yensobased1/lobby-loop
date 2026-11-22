@@ -6922,7 +6922,10 @@ RestartAsAdmin() {
 DropOwnWindows(lines) {
     rects := []
     pid := DllCall("GetCurrentProcessId")
-    for hwnd in WinGetList("ahk_pid " pid) {
+    wins := WinGetList("ahk_pid " pid)
+    for hwnd in WinGetList("ahk_class AutoHotkeyGUI")      ; also a second Lobby Loop (e.g. Zen) on the same PC
+        wins.Push(hwnd)
+    for hwnd in wins {
         try {
             if !(WinGetStyle(hwnd) & 0x10000000)            ; WS_VISIBLE
                 continue
