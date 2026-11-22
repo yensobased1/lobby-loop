@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.8.0
+;@Ahk2Exe-SetVersion 7.9.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.8"
+VERSION := "7.9"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,17 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.9  (22 Nov 2026)",
+    "  * Clicks CLAIM on the TREASURE FOUND! screen (it got stuck there before),",
+    "    one prize after another, and saves the item name (e.g. Oscar's Wraps, Loading screen)",
+    "  * No more false finds from the status box, Settings or other windows, or when",
+    "    you tab out",
+    "  * Gizmos: YOU FOUND SPRITE GIZMO now counts as a gizmo",
+    "  * The weekly cosmetics category is now just called Treasure",
+    "  * Phone control: tells you when the bot token is missing, and retries after",
+    "    10 minutes instead of giving up",
+    "  * !timer and !profile work again",
+    "",
     "v7.8  (18 Nov 2026)",
     "  + Weekly prizes update by themselves (a GitHub job reads fnchesttracker.com)",
     "  + One-click Overnight treasure farm (Settings > Play) and a Setup checklist",
@@ -259,7 +270,7 @@ DEFAULTS := [
     ["WATCH_TREASURE", 1, "1 = watch the screen for treasure (gizmos, pirate tokens...)"],
     ["TREASURE_WORDS", "", "Your own extra treasure words, separated by commas"],
     ["TREASURE_GIZMO", 1, "1 = look for gizmos (Sprite Locator, Lucky Locator...)"],
-    ["TREASURE_GIZMO_WORDS", "SPRITE LOCATOR,LUCKY LOCATOR,GOLDEN FIREWORK,EXTRACTION ACCELERATOR,PORTABLE EXTRACTOR", "Gizmo prize names (only counted with a YOU FOUND banner)"],
+    ["TREASURE_GIZMO_WORDS", "GIZMO,SPRITE LOCATOR,LUCKY LOCATOR,GOLDEN FIREWORK,EXTRACTION ACCELERATOR,PORTABLE EXTRACTOR", "Gizmo prize names (only counted with a YOU FOUND banner)"],
     ["TREASURE_COSMETIC", 1, "1 = look for the weekly treasure cosmetics"],
     ["TREASURE_COSMETIC_WORDS", "SOLID GOLD", "This week's cosmetic prize names. Any other YOU FOUND prize also counts as a cosmetic"],
     ["TREASURE_TOKEN", 1, "1 = look for Pirate Shop Access (the pirate token)"],
@@ -629,6 +640,10 @@ SetTimer(() => UpdateTreasureWords(), -8000)
 SetTimer(() => UpdateTreasureWords(), 21600000)          ; and every 6 hours
 SetTimer(CheckWindowModeOnce, -15000)
 SetTimer(CheckLanguageOnce, -20000)
+if (Trim(String(S["DISCORD_CHANNEL_ID"])) != "" && Trim(String(S["DISCORD_BOT_TOKEN"])) = "") {
+    Log("Phone control is off: no bot token (Settings > Phone control)")
+    SetTimer(() => Notify(Tx("Phone control is off"), Tx("The bot token is missing. Paste it in Settings > Phone control.")), -12000)
+}
 SetTimer(() => CleanData(), -60000)
 SetTimer(() => (IniRead(STATS_FILE, "Stats", "ChecklistShown", "") = "" && !running) ? ShowChecklist() : 0, -25000)
 if !running
@@ -825,6 +840,8 @@ SelfTest() {
     rows.Push([hasWin ? ok : no, Tx("Fortnite is open")])
     rows.Push([isActive ? ok : "⚠️", isActive ? Tx("Fortnite is the active window") : Tx("Click into Fortnite before starting")])
     rows.Push([A_IsAdmin ? ok : no, Tx("Running as Administrator")])
+    if (Trim(String(S["DISCORD_CHANNEL_ID"])) != "" || Trim(String(S["DISCORD_BOT_TOKEN"])) != "")
+        rows.Push([BotEnabled() ? ok : no, BotEnabled() ? Tx("Phone control is set up") : Tx("Phone control: the bot token or channel ID is missing (Settings > Phone control)")])
     rows.Push([info, Tx("Fortnite Sleep Mode: set it to Never (Settings > Game > Energy Saving)"), true])
     wm := FortniteWindowMode()
     rows.Push([wm = 1 ? ok : (wm = "" ? info : "⚠️"), SubStr(WindowModeText(), 3), wm = ""])
@@ -1886,6 +1903,12 @@ LoadTranslations() {
         "Check Fortnite's servers first (wait during outages)", "افحص خوادم Fortnite أولًا (انتظر أثناء الأعطال)",
         "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "اضغط على نوافذ Fortnite المعروفة تلقائيًا (انقطع الاتصال، الخادم لا يستجيب، تمت الإزالة...)",
         "Clips", "المقاطع",
+        "Phone control is set up", "التحكم بالهاتف جاهز",
+        "Phone control: the bot token or channel ID is missing (Settings > Phone control)", "التحكم بالهاتف: رمز البوت أو معرّف القناة مفقود (الإعدادات > التحكم بالهاتف)",
+        "Phone control is off", "التحكم بالهاتف متوقف",
+        "The bot token is missing. Paste it in Settings > Phone control.", "رمز البوت مفقود. الصقه في الإعدادات > التحكم بالهاتف.",
+        "Phone control needs the bot token too, or your commands won't work. Save without it?", "التحكم بالهاتف يحتاج رمز البوت أيضًا وإلا لن تعمل أوامرك. الحفظ بدونه؟",
+        "Claimed {1}", "تم استلام {1}",
         "After a match:", "بعد المباراة:",
         "Play Again (faster)", "Play Again (أسرع)",
         "Return to lobby (shows prizes)", "العودة إلى الردهة (تُظهر الجوائز)",
@@ -1946,7 +1969,7 @@ LoadTranslations() {
         "Prize banner (must be on screen)", "لافتة الجائزة (يجب أن تظهر على الشاشة)",
         "Pirate Shop Access (pirate token)", "وصول متجر القراصنة (رمز القراصنة)",
         "Gizmos (Sprite Locator, Lucky Locator...)", "الأدوات (Sprite Locator، Lucky Locator...)",
-        "Weekly treasure cosmetics (and any other prize)", "أزياء الكنز الأسبوعية (وأي جائزة أخرى)",
+        "Treasure (any other prize)", "كنز (أي جائزة أخرى)",
         "Separate words with commas. Start a word with ! to count it without the banner.", "افصل الكلمات بفواصل. ابدأ الكلمة بـ ! لتُحسب بدون اللافتة.",
         "Waiting for my squad to finish", "في انتظار انتهاء فريقي",
         "Don't click Play Again while my teammates are still playing", "لا تضغط Play Again بينما زملائي ما زالوا يلعبون",
@@ -2839,8 +2862,17 @@ BotRequest(method, url, body := "") {
 
 BotPoll() {
     global botLastId, botFails
-    if !BotEnabled() || botFails >= 10
+    static failedAt := 0
+    if !BotEnabled()
         return
+    if (botFails >= 10) {                              ; paused after errors: try again every 10 minutes
+        if !failedAt
+            failedAt := A_TickCount
+        if (A_TickCount - failedAt < 600000)
+            return
+        botFails := 0, failedAt := 0
+        Log("Phone control: trying again")
+    }
     url := "https://discord.com/api/v10/channels/" Trim(String(S["DISCORD_CHANNEL_ID"])) "/messages?limit=10"
     if (botLastId != "")
         url .= "&after=" botLastId
@@ -3554,6 +3586,9 @@ HandleScreenText(txt) {
             continue
         lines.Push({x: Integer(p[1]), y: Integer(p[2]), w: Integer(p[3]), h: Integer(p[4]), text: Trim(p[5])})
     }
+    if (!running || !WinActive(S["GAME_WINDOW"]))       ; tabbed out while it was reading: ignore it
+        return
+    lines := DropOwnWindows(lines)                     ; status box, Settings, tips: never read our own text
     joined := ""
     for ln in lines
         joined .= " " StrUpper(ln.text)
@@ -3570,7 +3605,7 @@ HandleScreenText(txt) {
     SquadCheck(lines)
     if S["WATCH_TREASURE"]
         CheckTreasure(lines)
-    if (S["WATCH_TREASURE"] && LobbyProof(lines, joined))
+    if ClaimPrizeScreen(lines, joined)
         return
     if KnownPopup(lines, joined)
         return
@@ -4668,7 +4703,7 @@ OnMatchEnd(gotCrops, shot) {
 TreasureCategories() {
     cats := []
     for c in [["token", "Pirate Shop Access", "TREASURE_TOKEN"], ["gizmo", "Gizmo", "TREASURE_GIZMO"],
-              ["custom", "My own words", ""], ["cosmetic", "Weekly treasure cosmetic", "TREASURE_COSMETIC"]] {
+              ["custom", "My own words", ""], ["cosmetic", "Treasure", "TREASURE_COSMETIC"]] {
         on := (c[3] = "") ? true : S[c[3]]
         words := (c[3] = "") ? S["TREASURE_WORDS"] : S[c[3] "_WORDS"]
         if on
@@ -4700,7 +4735,7 @@ TreasureCategoryFor(u, banner) {
         for w in cat.words {
             strong := (SubStr(w, 1, 1) = "!")
             w2 := LTrim(w, "!")
-            if (w2 != "" && InStr(u, w2) && (banner || strong))
+            if (w2 != "" && (InStr(u, w2) || (StrLen(w2) >= 5 && InStr(PrizeKey(u), PrizeKey(w2)))) && (banner || strong))
                 return cat
         }
     if banner
@@ -4729,9 +4764,11 @@ CheckTreasure(lines) {
         if isBanner {
             txt := ln.text                                  ; add the lines right next to it (same banner)
             for other in lines
-                if (other != ln && Abs(other.y - ln.y) < Max(ln.h, 20) * 3
+                if (other != ln && Abs(other.y - ln.y) < Max(ln.h, 20) * 3 && other.x >= ln.x - W * 0.05
                     && Abs((other.x + other.w / 2) - (ln.x + ln.w / 2)) < W * 0.25 && !TreasureNoise(StrUpper(other.text)))
                     txt .= " " other.text
+            if IsObject(item := PrizeFromScreen(lines))
+                txt := item.name " (" item.type ")"
             cat := TreasureCategoryFor(StrUpper(txt), true)
         } else {
             txt := ln.text
@@ -5258,7 +5295,7 @@ OpenSettings(startPage := 1) {
     add(UiText(g, "xs y+8 w300", Tx("Prize banner (must be on screen)")))
     c["TREASURE_FOUND_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S["TREASURE_FOUND_WORDS"]))
     for item in [["TREASURE_TOKEN", "Pirate Shop Access (pirate token)"], ["TREASURE_GIZMO", "Gizmos (Sprite Locator, Lucky Locator...)"],
-                 ["TREASURE_COSMETIC", "Weekly treasure cosmetics (and any other prize)"]] {
+                 ["TREASURE_COSMETIC", "Treasure (any other prize)"]] {
         c[item[1]] := addAll(UiCheck(g, "xs y+9", Tx(item[2]), S[item[1]], 280))
         c[item[1] "_WORDS"] := add(UiEdit(g, "xs y+4 w300 r1", S[item[1] "_WORDS"]))
     }
@@ -5552,6 +5589,8 @@ SaveSettingsGui(g, c) {
         thAt := Format("{:02}:{:02}", ck4.h, ck4.m)
     }
     channel := Trim(c["CHANNEL"].Value)
+    if (channel != "" && Trim(c["TOKEN"].Value) = "" && MsgBox(Tx("Phone control needs the bot token too, or your commands won't work. Save without it?"), TITLE, "YesNo Icon! Owner" g.Hwnd) != "Yes")
+        return
     if (channel != "" && !RegExMatch(channel, "^\d{15,22}$"))
         return bad("The channel ID should be a long number (right-click the channel > Copy Channel ID).")
     try {
@@ -6909,4 +6948,112 @@ RestartAsAdmin() {
             Run('*RunAs "' A_AhkPath '" "' A_ScriptFullPath '"')
         ExitApp()
     }
+}
+
+; ============================================================
+; v7.9: never read our own windows (status box, Settings, tips, cards)
+; ============================================================
+DropOwnWindows(lines) {
+    rects := []
+    pid := DllCall("GetCurrentProcessId")
+    for hwnd in WinGetList("ahk_pid " pid) {
+        try {
+            if !(WinGetStyle(hwnd) & 0x10000000)            ; WS_VISIBLE
+                continue
+            WinGetPos(&x, &y, &w, &h, hwnd)
+            if (w > 0 && h > 0)
+                rects.Push([x, y, x + w, y + h])
+        }
+    }
+    if !rects.Length
+        return lines
+    out := []
+    for ln in lines {
+        cx := ln.x + ln.w // 2, cy := ln.y + ln.h // 2
+        inside := false
+        for r in rects
+            if (cx >= r[1] && cx <= r[3] && cy >= r[2] && cy <= r[4]) {
+                inside := true
+                break
+            }
+        if !inside
+            out.Push(ln)
+    }
+    return out
+}
+
+; ============================================================
+; v7.9: the TREASURE FOUND! / UNLOCKED! screen in the lobby: read the item, save proof, click CLAIM
+; ============================================================
+PRIZE_TYPES() => ["LOADING SCREEN", "OUTFIT", "PICKAXE", "BACK BLING", "JAM TRACK", "CAR", "VEHICLE", "DECAL", "WHEELS", "BODY",
+                  "GLIDER", "EMOTE", "WRAP", "CONTRAIL", "SPRAY", "BANNER", "EMOTICON", "MUSIC", "GIZMO", "SPRITE", "HARVESTING TOOL"]
+
+; On the prize screen the type sits right above the item name, e.g. LOADING SCREEN / OSCAR'S WRAPS
+PrizeFromScreen(lines) {
+    for ln in lines {
+        u := Trim(StrUpper(RegExReplace(ln.text, "[^A-Za-z ]")))
+        isType := false
+        for t in PRIZE_TYPES()
+            if (u = t)
+                isType := true
+        if !isType
+            continue
+        best := "", bestDy := 99999
+        for other in lines {
+            dy := other.y - (ln.y + ln.h)
+            if (other != ln && dy >= -5 && dy < ln.h * 4 && Abs(other.x - ln.x) < A_ScreenWidth * 0.08 && dy < bestDy
+                && StrLen(RegExReplace(other.text, "[^A-Za-z]")) >= 2)
+                best := other, bestDy := dy
+        }
+        if IsObject(best)
+            return {name: Trim(best.text, " .!•"), type: StrTitle(StrLower(u))}
+    }
+    return ""
+}
+
+ClaimPrizeScreen(lines, joined) {
+    global lastClaimTick, clicks, prizeWaitUntil, backToLobbyUntil
+    static lastShot := Map()
+    if !(InStr(joined, "TREASURE FOUND") || InStr(joined, "YOU FOUND") || InStr(joined, "UNLOCKED"))
+        return false
+    btn := ""
+    for ln in lines {
+        u := Trim(StrUpper(ln.text), " .!•")
+        if (u = "CLAIM" || u = "CLAIM ALL" || u = "CLAIM REWARD" || u = "COLLECT")
+            btn := ln
+    }
+    if (!IsObject(btn) && (!InStr(joined, "TREASURE FOUND") || gameState = "match" || gameState = "spectating"))
+        return false                                    ; in-match notice: nothing to click
+    if (A_TickCount - lastClaimTick < 3500)
+        return true
+    item := PrizeFromScreen(lines)
+    label := IsObject(item) ? item.name " (" item.type ")" : "treasure"
+    ; proof screenshot first (once per item)
+    if (S["TREASURE_PROOF"] && (!lastShot.Has(label) || A_TickCount - lastShot[label] > 120000)) {
+        lastShot[label] := A_TickCount
+        dir := DATA_DIR "\" BASE "_treasure_proof"
+        try DirCreate(dir)
+        shot := dir "\" FormatTime(, "yyyy-MM-dd_HH-mm-ss") ".png"
+        if SaveRegionImage(shot, 0, 0, A_ScreenWidth, A_ScreenHeight) {
+            Log("Prize proof saved: " shot)
+            if DiscordReady()
+                DiscordFile("🏴‍☠️ **Treasure claimed** on " PlayerName() "'s account: **" label "**", shot)
+        }
+    }
+    if !WinActive(S["GAME_WINDOW"])
+        return true
+    ; click CLAIM (where OCR found it, or the usual spot at the bottom middle)
+    x := IsObject(btn) ? btn.x + btn.w // 2 : A_ScreenWidth // 2
+    y := IsObject(btn) ? btn.y + btn.h // 2 : Round(A_ScreenHeight * 0.884)
+    ReleaseAll()
+    MouseMove(x, y, 5)
+    Sleep(180)
+    Click()
+    clicks += 1
+    lastClaimTick := A_TickCount
+    prizeWaitUntil := A_TickCount + 8000               ; another prize screen may follow
+    backToLobbyUntil := Max(backToLobbyUntil, A_TickCount + 8000)
+    Log("Claimed " label (IsObject(btn) ? "" : " (clicked where CLAIM usually is)"))
+    SetStatus("🏴‍☠️ " Tx("Claimed {1}", label))
+    return true
 }
