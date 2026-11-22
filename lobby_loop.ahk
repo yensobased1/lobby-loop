@@ -33,6 +33,9 @@ CHANGELOG := [
     "    10 minutes instead of giving up",
     "  * !timer and !profile work again",
     "  - Removed Treasure Hours (button, schedule and !th)",
+    "  + Fresh restart: reopens Fortnite every 6 hours (you pick), only between matches",
+    "  + !set: change settings from your phone (mode, stop, after a match, volume...)",
+    "  + Multi-monitor: works on the screen Fortnite is on (or pick one in Settings > Look)",
     "",
     "v7.8  (18 Nov 2026)",
     "  + Weekly prizes update by themselves (a GitHub job reads fnchesttracker.com)",
@@ -245,6 +248,8 @@ DEFAULTS := [
     ["DAILY_SUMMARY_TIME", "23:55", "Daily Discord summary at this time (blank = off)"],
     ["DISCORD_BOT_TOKEN", "", "Discord bot token for phone control (blank = off). Never share it"],
     ["DISCORD_CHANNEL_ID", "", "Discord channel ID the bot listens to"],
+    ["FRESH_RESTART_HOURS", 6, "Restart Fortnite every this many hours, between matches (0 = off)"],
+    ["GAME_MONITOR", 0, "Screen Fortnite runs on: 0 = find it by itself, 1, 2, 3..."],
     ["WEEKLY_RECAP", 1, "1 = weekly recap in Discord on Sundays at 8 PM"],
     ["LEADERBOARD_WEBHOOK", "", "Friends leaderboard: a webhook link for a shared channel (each PC keeps one card there)"],
     ["NTFY_TOPIC", "", "Phone push with the ntfy app: your topic name (blank = off)"],
@@ -504,6 +509,7 @@ squadBaseline := 0     ; most rows seen in the squad list this match
 squadLowSince := 0
 squadLeft := false
 serverFetches := 0     ; how many times the Epic status page was really read
+fnStartTick := 0       ; when Fortnite was (last seen) started, for the fresh restart
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
 SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIME", "STOP_ACTION", "MUTE_WHILE_RUNNING",
@@ -513,7 +519,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "IDLE_MAX", "THEME", "ACCENT", "OVERLAY_STYLE", "OVERLAY_SIZE", "OVERLAY_CORNER", "STUCK_MINUTES",
                "TREASURE_GIZMO", "TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN",
                "TREASURE_TOKEN_WORDS", "TREASURE_FOUND_WORDS", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "TREASURE_ONLINE",
-               "TREASURE_STOP", "TREASURE_PROOF", "LOBBY_AFTER_MATCH", "LOBBY_PRIZE_WAIT", "WEEKLY_RECAP", "EMPTY_SQUAD",
+               "TREASURE_STOP", "TREASURE_PROOF", "LOBBY_AFTER_MATCH", "LOBBY_PRIZE_WAIT", "WEEKLY_RECAP", "EMPTY_SQUAD", "FRESH_RESTART_HOURS",
                "SQUAD_MIN_ROWS", "SQUAD_LEAVE_SEC", "SQUAD_REGION", "CLEAN_DAYS", "CLEAN_PROOF_DAYS", "LOG_MAX_MB", "DISK_MIN_GB", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
                "BATTERY_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
@@ -543,7 +549,9 @@ GAMEKEY_FIELDS := [["KEY_FORWARD", "Forward"], ["KEY_LEFT", "Left"], ["KEY_BACK"
                    ["KEY_JUMP", "Jump"], ["KEY_SPRINT", "Sprint"], ["KEY_CROUCH", "Crouch"], ["KEY_SLOTS", "Weapon slots"]]
 
 ; ---------- Button detection ----------
-SCALE := Min(A_ScreenWidth / 2560, A_ScreenHeight / 1440)   ; works for 16:9, 16:10 and 21:9
+MON_X := 0, MON_Y := 0, MON_W := A_ScreenWidth, MON_H := A_ScreenHeight   ; the screen Fortnite is on (v7.9)
+UpdateMonitor(true)
+SCALE := Min(MON_W / 2560, MON_H / 1440)   ; works for 16:9, 16:10 and 21:9
 COLORS := [0xA8AF00, 0xF7FE19]           ; olive and bright-yellow Fortnite styles
 REGIONS := Map(
     "end",   [0.62, 0.25, 1.00, 0.85],   ; right side: PLAY AGAIN after a match
@@ -649,7 +657,7 @@ if !running
 ShowTip(Tx("{1} loaded.", TITLE " v" VERSION) "`n" Tx("{1} = start/stop   {2} = settings   {3} = self-test", HK_TOGGLE, HK_SETTINGS, HK_TEST), 5000)
 if migrated
     Log("Copied " migrated " file(s) from the old Fortnite AFK version")
-Log("Loaded v" VERSION (A_IsCompiled ? " (exe)" : " (ahk)") ". Screen " A_ScreenWidth "x" A_ScreenHeight ", admin=" A_IsAdmin ", stop: " DescribeStop() ", start: " DescribeStart() ", popups: " POPUPS.Length)
+Log("Loaded v" VERSION (A_IsCompiled ? " (exe)" : " (ahk)") ". Screen " MON_W "x" MON_H ", admin=" A_IsAdmin ", stop: " DescribeStop() ", start: " DescribeStart() ", popups: " POPUPS.Length)
 
 if safeMode
     SetTimer(() => ShowCard("🛟 " Tx("Safe mode"), [["⚠️", Tx("Lobby Loop didn't close properly last time.")],
@@ -852,7 +860,7 @@ SelfTest() {
     }
     rows.Push([info, Tx("Start: {1}", DescribeStart()) "   ·   " Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), true])
     rows.Push([info, "Discord: " (DiscordUrl() != "" ? Tx("on") : Tx("off")) "   ·   " Tx("Phone control") ": " (BotEnabled() ? Tx("on") : Tx("off")) "   ·   " Tx("Updates") ": " (UpdateUrl() != "" ? Tx("on") : Tx("off")), true])
-    rows.Push([info, Tx("Screen {1}", A_ScreenWidth "x" A_ScreenHeight) "   ·   v" VERSION (A_IsCompiled ? " exe" : "") "   ·   " Tx("Learned popup buttons: {1}", POPUPS.Length), true])
+    rows.Push([info, Tx("Screen {1}", MON_W "x" MON_H) "   ·   v" VERSION (A_IsCompiled ? " exe" : "") "   ·   " Tx("Learned popup buttons: {1}", POPUPS.Length), true])
     txt .= "`nStart: " DescribeStart() ", stop: " DescribeStop() ", Discord: " (DiscordUrl() != "" ? "on" : "off") ", bot: " (BotEnabled() ? "on" : "off") ", popups: " POPUPS.Length
     Log("Self-test:`n" txt)
     testCard := ShowCard("🔎 " Tx("Self-test"), rows, 8000, Tx("Closes by itself, or press {1} again.", HK_TEST))
@@ -1165,6 +1173,8 @@ ScheduleWatch() {
     BatteryCheck()
     WeeklyRecapCheck()
     CleanData()
+    UpdateMonitor()
+    FreshRestartTrack()
     if running {
         DiskCheck()
         LbCardUpdate()
@@ -1301,7 +1311,7 @@ ActionTick() {
     }
     msg := Tx("{1} in {2} s", ActionLabel(pendingAction), pendingLeft)
     SetStatus(msg " (" Tx("Press {1} to cancel", HK_TOGGLE) ")")
-    ToolTip(TITLE ": " msg "`n" Tx("Press {1} to cancel", HK_TOGGLE), A_ScreenWidth // 2 - 160, A_ScreenHeight // 2)
+    ToolTip(TITLE ": " msg "`n" Tx("Press {1} to cancel", HK_TOGGLE), MON_X + MON_W // 2 - 160, MON_Y + MON_H // 2)
     if (S["BEEP"] && pendingLeft <= 5)
         SoundBeep(800, 80)
     pendingLeft -= 1
@@ -1421,9 +1431,10 @@ ForgetPopups() {
 ; Hover over an EMPTY part of a popup button (not the text) and press F7
 TeachPopup() {
     MouseGetPos(&mx, &my)
-    MouseMove(2, A_ScreenHeight - 2, 0)        ; move away so the hover highlight goes
+    UpdateMonitor()
+    MouseMove(MON_X + 2, MON_Y + MON_H - 2, 0)        ; move away so the hover highlight goes
     Sleep(400)
-    cap := Capture(0, 0, A_ScreenWidth, A_ScreenHeight)
+    cap := Capture(MON_X, MON_Y, MON_W, MON_H)
     MouseMove(mx, my, 0)
     c := Px(cap, mx, my)
     tol := 12
@@ -1437,7 +1448,7 @@ TeachPopup() {
     while Close(Px(cap, mx, b + 1), c, tol)
         b += 1
     w := r - l, h := b - t
-    if (w < 80 * SCALE || h < 25 * SCALE || w > A_ScreenWidth * 0.6 || h > 300 * SCALE) {
+    if (w < 80 * SCALE || h < 25 * SCALE || w > MON_W * 0.6 || h > 300 * SCALE) {
         ShowTip("Couldn't find a button there (" w "x" h ").`nHover over an EMPTY part of the button (beside the text) and press " HK_TEACH " again.", 6000)
         return
     }
@@ -1445,7 +1456,7 @@ TeachPopup() {
         ShowTip("Already 6 popup buttons learned. Tray menu > Forget learned popup buttons.", 5000)
         return
     }
-    POPUPS.Push({l: l / A_ScreenWidth, t: t / A_ScreenHeight, r: r / A_ScreenWidth, b: b / A_ScreenHeight, color: c, last: 0})
+    POPUPS.Push({l: (l - MON_X) / MON_W, t: (t - MON_Y) / MON_H, r: (r - MON_X) / MON_W, b: (b - MON_Y) / MON_H, color: c, last: 0})
     SavePopups()
     Log("Learned popup #" POPUPS.Length ": " l "," t " - " r "," b " colour " Format("0x{:06X}", c))
     ShowTip("Learned popup button #" POPUPS.Length " (" w "x" h ").`nIt will be clicked whenever it shows up.", 4000)
@@ -1453,8 +1464,8 @@ TeachPopup() {
 
 ; Is a learned popup button on screen? Returns its centre {x, y} or 0.
 PopupVisible(p) {
-    l := Round(p.l * A_ScreenWidth), t := Round(p.t * A_ScreenHeight)
-    r := Round(p.r * A_ScreenWidth), b := Round(p.b * A_ScreenHeight)
+    l := MON_X + Round(p.l * MON_W), t := MON_Y + Round(p.t * MON_H)
+    r := MON_X + Round(p.r * MON_W), b := MON_Y + Round(p.b * MON_H)
     w := r - l, h := b - t
     if (w < 10 || h < 5)
         return 0
@@ -1892,6 +1903,14 @@ LoadTranslations() {
         "Check Fortnite's servers first (wait during outages)", "افحص خوادم Fortnite أولًا (انتظر أثناء الأعطال)",
         "Click known Fortnite popups by itself (disconnected, server not responding, removed...)", "اضغط على نوافذ Fortnite المعروفة تلقائيًا (انقطع الاتصال، الخادم لا يستجيب، تمت الإزالة...)",
         "Clips", "المقاطع",
+        "Fresh restart: restart Fortnite every this many hours, between matches (0 = off):", "إعادة تشغيل منعشة: أعد تشغيل Fortnite كل هذا العدد من الساعات بين المباريات (0 = إيقاف):",
+        "Keeps Fortnite running smoothly overnight. It never restarts during a match.", "يبقي Fortnite سلسًا طوال الليل. لا يعيد التشغيل أثناء مباراة أبدًا.",
+        "Fortnite's screen", "شاشة Fortnite",
+        "Find it by itself", "اعثر عليها تلقائيًا",
+        "Screen {1}", "الشاشة {1}",
+        "main", "الرئيسية",
+        "Fresh restart: reopening Fortnite", "إعادة تشغيل منعشة: إعادة فتح Fortnite",
+        "Type !help in your channel to see all 30+ commands. Change settings with !set (type !set to see them).", "اكتب ‎!help في قناتك لرؤية كل الأوامر. غيّر الإعدادات بـ ‎!set (اكتب ‎!set لرؤيتها).",
         "Phone control is set up", "التحكم بالهاتف جاهز",
         "Phone control: the bot token or channel ID is missing (Settings > Phone control)", "التحكم بالهاتف: رمز البوت أو معرّف القناة مفقود (الإعدادات > التحكم بالهاتف)",
         "Phone control is off", "التحكم بالهاتف متوقف",
@@ -2331,11 +2350,11 @@ PlaceOverlay() {
     statusGui.GetPos(, , &w, &h)
     corner := StrLower(String(S["OVERLAY_CORNER"]))
     if (corner = "custom") {
-        x := Max(0, Min(Integer(S["OVERLAY_X"]), A_ScreenWidth - w))
-        y := Max(0, Min(Integer(S["OVERLAY_Y"]), A_ScreenHeight - h))
+        x := Max(SysGet(76), Min(Integer(S["OVERLAY_X"]), SysGet(76) + SysGet(78) - w))     ; anywhere on the desktop
+        y := Max(SysGet(77), Min(Integer(S["OVERLAY_Y"]), SysGet(77) + SysGet(79) - h))
     } else {
-        x := InStr(corner, "right") ? A_ScreenWidth - w - 12 : 12
-        y := InStr(corner, "bottom") ? A_ScreenHeight - h - 60 : 12
+        x := MON_X + (InStr(corner, "right") ? MON_W - w - 12 : 12)
+        y := MON_Y + (InStr(corner, "bottom") ? MON_H - h - 60 : 12)
     }
     statusGui.Move(x, y)
 }
@@ -2465,8 +2484,8 @@ ToggleBlackout(want := -1) {
         g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")
         g.BackColor := "000000"
         g.SetFont("s10", "Segoe UI")
-        g.Add("Text", "c404040 x20 y" (A_ScreenHeight - 40) " w" (A_ScreenWidth - 40), Tx("Screen dimmed by Lobby Loop. Press {1} to undo.", HK_BLACKOUT))
-        g.Show("x0 y0 w" A_ScreenWidth " h" A_ScreenHeight " NoActivate")
+        g.Add("Text", "c404040 x20 y" (MON_H - 40) " w" (MON_W - 40), Tx("Screen dimmed by Lobby Loop. Press {1} to undo.", HK_BLACKOUT))
+        g.Show("x" MON_X " y" MON_Y " w" MON_W " h" MON_H " NoActivate")
         WinSetTransparent(254, g)
         DllCall("SetWindowDisplayAffinity", "Ptr", g.Hwnd, "UInt", 0x11)   ; hidden from screen capture
         blackoutGui := g
@@ -2584,7 +2603,7 @@ SaveRegionImage(path, x, y, w, h) {
 
 TakeScreenshot() {
     path := A_Temp "\lobby_loop_screenshot.jpg"
-    return SaveRegionImage(path, 0, 0, A_ScreenWidth, A_ScreenHeight) ? path : ""
+    return SaveRegionImage(path, MON_X, MON_Y, MON_W, MON_H) ? path : ""
 }
 
 SendScreenshot(msg := "Screenshot") {
@@ -2616,10 +2635,10 @@ SendLog() {
 ; ============================================================
 ; Saves the two areas of the end screen that hold "YOU PLACED #12" and "8,300 XP"
 SaveResultCrops() {
-    W := A_ScreenWidth, H := A_ScreenHeight
+    W := MON_W, H := MON_H
     p1 := A_Temp "\ll_place.png", p2 := A_Temp "\ll_xp.png"
-    ok1 := SaveRegionImage(p1, Round(W * 0.30), 0, Round(W * 0.40), Round(H * 0.08))
-    ok2 := SaveRegionImage(p2, Round(W * 0.30), Round(H * 0.45), Round(W * 0.40), Round(H * 0.25))
+    ok1 := SaveRegionImage(p1, MON_X + Round(W * 0.30), MON_Y, Round(W * 0.40), Round(H * 0.08))
+    ok2 := SaveRegionImage(p2, MON_X + Round(W * 0.30), MON_Y + Round(H * 0.45), Round(W * 0.40), Round(H * 0.25))
     return ok1 && ok2
 }
 
@@ -2930,7 +2949,7 @@ HandleCommand(text, authorId := "") {
     cmd := StrLower(parts[1])
     target := parts.Length >= 2 ? Trim(parts[2]) : ""
     arg := ""
-    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode") {   ; these take a value, not a PC name
+    if (cmd = "timer" || cmd = "profile" || cmd = "watch" || cmd = "pause" || cmd = "mode" || cmd = "set") {   ; these take a value, not a PC name
         arg := target
         target := ""
     }
@@ -2947,7 +2966,7 @@ HandleCommand(text, authorId := "") {
                 . "📊 ``!stats`` ``!summary`` ``!week`` ``!last`` ``!treasures`` ``!lb`` ``!uptime```n"
                 . "🎛️ ``!dim`` ``!mute`` ``!unmute`` ``!overlay`` ``!popups```n"
                 . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!servers`` ``!prizes```n"
-                . "🗓️ ``!recap``   👥 ``!teammates```n"
+                . "🗓️ ``!recap``   👥 ``!teammates``   ⚙️ ``!set`` (change settings)`n"
                 . "🏴‍☠️ ``!clip`` ``!read```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
@@ -3106,7 +3125,7 @@ HandleCommand(text, authorId := "") {
         case "clip":
             Discord(who (DoClip("phone") ? "🎬 clip key pressed" : "🎬 no clip key set (Settings > Treasure)"))
         case "read":
-            lines := OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight)
+            lines := OcrRegionSync(MON_X, MON_Y, MON_W, MON_H)
             all := ""
             for ln in lines
                 if (StrLen(all) < 1500 && StrLen(ln.text) >= 3)
@@ -3115,6 +3134,8 @@ HandleCommand(text, authorId := "") {
         case "prizes":
             wk := PrizeWeek()
             Discord(who (wk ? "🎁 **Week " wk " prizes**`n" StrReplace(PrizesText(wk), "⬜", "▫️") : "no prize list yet (it comes with the online treasure words)."))
+        case "set":
+            PhoneSet(arg, authorId, who)
         case "recap":
             Discord(WeeklyRecapText())
         case "teammates":
@@ -3547,8 +3568,9 @@ ScreenReaderTick() {
     if (A_TickCount - lastOcrTick < (S["WATCH_TREASURE"] ? 3 : Max(5, S["SCREEN_READER_SECONDS"])) * 1000)
         return
     lastOcrTick := A_TickCount
+    UpdateMonitor()
     img := A_Temp "\ll_screen.png"
-    if !SaveRegionImage(img, 0, 0, A_ScreenWidth, A_ScreenHeight)
+    if !SaveRegionImage(img, MON_X, MON_Y, MON_W, MON_H)
         return
     script := A_Temp "\ll_ocr_lines_v75.ps1"
     if !FileExist(script)
@@ -3566,7 +3588,7 @@ HandleScreenText(txt) {
         p := StrSplit(raw, "|", , 5)
         if (p.Length < 5 || !IsNumber(p[1]))
             continue
-        lines.Push({x: Integer(p[1]), y: Integer(p[2]), w: Integer(p[3]), h: Integer(p[4]), text: Trim(p[5])})
+        lines.Push({x: MON_X + Integer(p[1]), y: MON_Y + Integer(p[2]), w: Integer(p[3]), h: Integer(p[4]), text: Trim(p[5])})
     }
     if (!running || !WinActive(S["GAME_WINDOW"]))       ; tabbed out while it was reading: ignore it
         return
@@ -3997,7 +4019,7 @@ BugInfo() {
         loop logLines.Length - start + 1
             tail .= logLines[start + A_Index - 1] "`n"
     }
-    return "Version: " VERSION (A_IsCompiled ? " (exe)" : " (ahk)") "`nScreen: " A_ScreenWidth "x" A_ScreenHeight "`nWindows: " A_OSVersion "`nLanguage: " S["LANG"] "`n`nLast log lines:`n``````" "`n" tail "``````"
+    return "Version: " VERSION (A_IsCompiled ? " (exe)" : " (ahk)") "`nScreen: " MON_W "x" MON_H "`nWindows: " A_OSVersion "`nLanguage: " S["LANG"] "`n`nLast log lines:`n``````" "`n" tail "``````"
 }
 
 BugToGitHub(desc) {
@@ -4084,7 +4106,7 @@ ForgetPopup(index) {
 ForgetPopupUnderMouse() {
     MouseGetPos(&mx, &my)
     for i, p in POPUPS {
-        if (mx >= p.l * A_ScreenWidth && mx <= p.r * A_ScreenWidth && my >= p.t * A_ScreenHeight && my <= p.b * A_ScreenHeight) {
+        if (mx - MON_X >= p.l * MON_W && mx - MON_X <= p.r * MON_W && my - MON_Y >= p.t * MON_H && my - MON_Y <= p.b * MON_H) {
             ForgetPopup(i)
             ShowTip(Tx("Forgot popup button #{1}.", i), 2500)
             return
@@ -4320,8 +4342,8 @@ ColorDist(p, c) {
 
 FindButton(regionName) {
     rg := REGIONS[regionName]
-    x1 := Round(rg[1] * A_ScreenWidth), y1 := Round(rg[2] * A_ScreenHeight)
-    x2 := Round(rg[3] * A_ScreenWidth) - 1, y2 := Round(rg[4] * A_ScreenHeight) - 1
+    x1 := MON_X + Round(rg[1] * MON_W), y1 := MON_Y + Round(rg[2] * MON_H)
+    x2 := MON_X + Round(rg[3] * MON_W) - 1, y2 := MON_Y + Round(rg[4] * MON_H) - 1
     cap := Capture(x1, y1, x2 - x1 + 1, y2 - y1 + 1)
     tol := S["BUTTON_TOLERANCE"]
     q := Round(40 * SCALE)
@@ -4588,6 +4610,10 @@ MainLoop() {
             SleepActive(500)
             return
         }
+        if FreshRestartDue() {                          ; only here, between matches
+            FreshRestart()
+            return
+        }
         if (!modeChecked || (modeRecheckTick && A_TickCount >= modeRecheckTick)) {
             modeChecked := true
             modeRecheckTick := 0
@@ -4729,7 +4755,7 @@ TreasureCategoryFor(u, banner) {
 
 CheckTreasure(lines) {
     static seen := Map()
-    W := A_ScreenWidth, H := A_ScreenHeight
+    W := MON_W, H := MON_H
     foundWords := WordList(S["TREASURE_FOUND_WORDS"])
     hits := []
     for ln in lines {
@@ -4919,7 +4945,7 @@ ShowScreenText(waitMs := 0) {
         Sleep(waitMs)
     }
     ShowTip(Tx("Reading the screen..."), 1500)
-    lines := OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight)
+    lines := OcrRegionSync(MON_X, MON_Y, MON_W, MON_H)
     all := ""
     for ln in lines
         all .= ln.text "`r`n"
@@ -4943,7 +4969,7 @@ ShowScreenText(waitMs := 0) {
 ; ============================================================
 ; Reads the mode button above Ready in the lobby, e.g. "Build, Squad, Fill"
 ReadLobbyMode() {
-    lines := OcrRegionSync(0, Round(A_ScreenHeight * 0.52), Round(A_ScreenWidth * 0.32), Round(A_ScreenHeight * 0.36))
+    lines := OcrRegionSync(MON_X, MON_Y + Round(MON_H * 0.52), Round(MON_W * 0.32), Round(MON_H * 0.36))
     all := "", anchor := ""
     for ln in lines {
         u := StrUpper(ln.text)
@@ -5001,7 +5027,7 @@ TrySwitchMode(m) {
         want := StrLower(S[key])
         if (want = "any" || !labels.Has(want))
             continue
-        lines := OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight)
+        lines := OcrRegionSync(MON_X, MON_Y, MON_W, MON_H)
         clicked := false
         for ln in lines {
             u := Trim(StrUpper(ln.text))
@@ -5239,6 +5265,9 @@ OpenSettings(startPage := 1) {
     tick("LAUNCH_FORTNITE", "Open Fortnite by itself (scheduled start, crash, stuck)")
     tick("CHECK_SERVERS", "Check Fortnite's servers first (wait during outages)")
     tick("START_WITH_WINDOWS", "Start with Windows")
+    say(Tx("Fresh restart: restart Fortnite every this many hours, between matches (0 = off):"), "y+14")
+    edit("FRESH_RESTART_HOURS", "y+4 w120")
+    hint(Tx("Keeps Fortnite running smoothly overnight. It never restarts during a match."))
 
     ; ---- 5. Extras ----
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
@@ -5347,7 +5376,7 @@ OpenSettings(startPage := 1) {
     if !POPUPS.Length
         hint(Tx("No popup buttons learned yet."), "y+14")
     for i, p in POPUPS {
-        pw := Round((p.r - p.l) * A_ScreenWidth), ph := Round((p.b - p.t) * A_ScreenHeight)
+        pw := Round((p.r - p.l) * MON_W), ph := Round((p.b - p.t) * MON_H)
         add(g.Add("Text", "x" CX " y+" (i = 1 ? 18 : 10) " w22 h22 Background" Format("{:06X}", p.color)))
         add(UiText(g, "x+10 yp+2 w300", "#" i "   " pw " x " ph " px   (" Round(p.l * 100) "%, " Round(p.t * 100) "%)"))
         fb := add(UiButton(g, "x+10 yp-4 w140", "🗑 " Tx("Forget")))
@@ -5397,7 +5426,7 @@ OpenSettings(startPage := 1) {
     c["ALLOWED"] := add(UiEdit(g, "x" CX " y+4 w" CW " r1", S["DISCORD_ALLOWED_IDS"]))
     pb := add(UiButton(g, "x" CX " y+14 w260", "🎛️ " Tx("Post the control panel")))
     pb.OnEvent("Click", (*) => ShowTip(PanelCreate() ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500))
-    hint(Tx("Type !help in your channel to see all 30+ commands."), "y+10")
+    hint(Tx("Type !help in your channel to see all 30+ commands. Change settings with !set (type !set to see them)."), "y+10")
 
     ; ---- 11. Look ----
     newPage(Tx("Look"), Tx("Language, theme and the status box."))
@@ -5431,6 +5460,14 @@ OpenSettings(startPage := 1) {
         if (k = StrLower(S["OVERLAY_SIZE"]))
             si := i
     c["SIZE"].Choose(si)
+    add(UiText(g, "xs y+16 w280 Section", Tx("Fortnite's screen")))
+    monItems := [Tx("Find it by itself")]
+    loop MonitorGetCount() {
+        MonitorGet(A_Index, &ml, &mt, &mr, &mb)
+        monItems.Push(Tx("Screen {1}", A_Index) "  (" (mr - ml) "x" (mb - mt) (A_Index = MonitorGetPrimary() ? ", " Tx("main") : "") ")")
+    }
+    c["GAME_MONITOR"] := add(UiDDL(g, "xs y+4 w260", monItems))
+    c["GAME_MONITOR"].Choose(Min(Integer(S["GAME_MONITOR"]) + 1, monItems.Length))
     c["SHOW_OVERLAY"] := addAll(UiCheck(g, "xs y+18", Tx("Show the status box") "  (" HK_OVERLAY ")", !overlayHidden, 260))
     mv := add(UiButton(g, "xs+" COL2 " yp-4 w260", "✋ " Tx("Move status box")))
     mv.OnEvent("Click", (*) => (g.Destroy(), MoveOverlay()))
@@ -5563,6 +5600,7 @@ SaveSettingsGui(g, c) {
     try {
         nums := Map("MATCH_LIMIT", num("MATCH_LIMIT", Tx("Stop after this many matches (0 = no limit):"), 0, 10000),
                     "BATTERY_MIN", num("BATTERY_MIN", Tx("Battery % that counts as low:"), 5, 95),
+                    "FRESH_RESTART_HOURS", num("FRESH_RESTART_HOURS", Tx("Fresh restart: restart Fortnite every this many hours, between matches (0 = off):"), 0, 48),
                     "CLEAN_DAYS", num("CLEAN_DAYS", Tx("Delete match lists older than this many days (0 = keep, treasure finds are always kept):"), 0, 3650),
                     "CLEAN_PROOF_DAYS", num("CLEAN_PROOF_DAYS", Tx("Delete proof screenshots older than this many days (0 = keep forever):"), 0, 3650),
                     "LOG_MAX_MB", num("LOG_MAX_MB", Tx("Keep the log under (MB):"), 1, 500),
@@ -5665,6 +5703,10 @@ SaveSettingsGui(g, c) {
     SetSetting("THEME", newTheme)
     SetSetting("OVERLAY_SIZE", newSize)
     SetSetting("OVERLAY_CORNER", ["top-left", "top-right", "bottom-left", "bottom-right", "custom"][c["CORNER"].Value])
+    if (c["GAME_MONITOR"].Value - 1 != Integer(S["GAME_MONITOR"])) {
+        SetSetting("GAME_MONITOR", c["GAME_MONITOR"].Value - 1)
+        UpdateMonitor(true)
+    }
     if (c["SHOW_OVERLAY"].Value = (overlayHidden ? 1 : 0))
         ToggleOverlay(c["SHOW_OVERLAY"].Value)
     g.Destroy()
@@ -5862,7 +5904,7 @@ LobbyProof(lines, joined) {
     dir := DATA_DIR "\" BASE "_treasure_proof"
     try DirCreate(dir)
     shot := dir "\" FormatTime(, "yyyy-MM-dd_HH-mm-ss") ".png"
-    saved := SaveRegionImage(shot, 0, 0, A_ScreenWidth, A_ScreenHeight)
+    saved := SaveRegionImage(shot, MON_X, MON_Y, MON_W, MON_H)
     Log("Lobby proof " (saved ? "saved: " shot : "screenshot failed"))
     if (saved && DiscordReady())
         DiscordFile("🏴‍☠️ **Treasure unlocked** on " PlayerName() "'s account. Proof screenshot, clicking " btn.text " now.", shot)
@@ -6204,7 +6246,7 @@ ReturnToLobbyClick() {
         clicks += 1
     }
     findLine(words) {
-        for ln in OcrRegionSync(0, 0, A_ScreenWidth, A_ScreenHeight) {
+        for ln in OcrRegionSync(MON_X, MON_Y, MON_W, MON_H) {
             u := Trim(StrUpper(ln.text))
             for w in words
                 if (u = w)
@@ -6402,7 +6444,7 @@ SquadRegion() {
     p := StrSplit(String(S["SQUAD_REGION"]), ",", " ")
     if (p.Length != 4)
         p := [0, 0.06, 0.20, 0.42]
-    return {x: Round(p[1] * A_ScreenWidth), y: Round(p[2] * A_ScreenHeight), x2: Round(p[3] * A_ScreenWidth), y2: Round(p[4] * A_ScreenHeight)}
+    return {x: MON_X + Round(p[1] * MON_W), y: MON_Y + Round(p[2] * MON_H), x2: MON_X + Round(p[3] * MON_W), y2: MON_Y + Round(p[4] * MON_H)}
 }
 
 SquadRows(lines) {
@@ -6925,7 +6967,7 @@ PrizeFromScreen(lines) {
         best := "", bestDy := 99999
         for other in lines {
             dy := other.y - (ln.y + ln.h)
-            if (other != ln && dy >= -5 && dy < ln.h * 4 && Abs(other.x - ln.x) < A_ScreenWidth * 0.08 && dy < bestDy
+            if (other != ln && dy >= -5 && dy < ln.h * 4 && Abs(other.x - ln.x) < MON_W * 0.08 && dy < bestDy
                 && StrLen(RegExReplace(other.text, "[^A-Za-z]")) >= 2)
                 best := other, bestDy := dy
         }
@@ -6958,7 +7000,7 @@ ClaimPrizeScreen(lines, joined) {
         dir := DATA_DIR "\" BASE "_treasure_proof"
         try DirCreate(dir)
         shot := dir "\" FormatTime(, "yyyy-MM-dd_HH-mm-ss") ".png"
-        if SaveRegionImage(shot, 0, 0, A_ScreenWidth, A_ScreenHeight) {
+        if SaveRegionImage(shot, MON_X, MON_Y, MON_W, MON_H) {
             Log("Prize proof saved: " shot)
             if DiscordReady()
                 DiscordFile("🏴‍☠️ **Treasure claimed** on " PlayerName() "'s account: **" label "**", shot)
@@ -6967,8 +7009,8 @@ ClaimPrizeScreen(lines, joined) {
     if !WinActive(S["GAME_WINDOW"])
         return true
     ; click CLAIM (where OCR found it, or the usual spot at the bottom middle)
-    x := IsObject(btn) ? btn.x + btn.w // 2 : A_ScreenWidth // 2
-    y := IsObject(btn) ? btn.y + btn.h // 2 : Round(A_ScreenHeight * 0.884)
+    x := IsObject(btn) ? btn.x + btn.w // 2 : MON_X + MON_W // 2
+    y := IsObject(btn) ? btn.y + btn.h // 2 : MON_Y + Round(MON_H * 0.884)
     ReleaseAll()
     MouseMove(x, y, 5)
     Sleep(180)
@@ -6980,4 +7022,152 @@ ClaimPrizeScreen(lines, joined) {
     Log("Claimed " label (IsObject(btn) ? "" : " (clicked where CLAIM usually is)"))
     SetStatus("🏴‍☠️ " Tx("Claimed {1}", label))
     return true
+}
+
+; ============================================================
+; v7.9: multi-monitor: everything reads and clicks on the screen Fortnite is on
+; ============================================================
+UpdateMonitor(force := false) {
+    global MON_X, MON_Y, MON_W, MON_H, SCALE
+    static last := 0
+    if (!force && A_TickCount - last < 5000)
+        return
+    last := A_TickCount
+    cnt := MonitorGetCount()
+    want := Integer(S["GAME_MONITOR"])
+    mon := (want >= 1 && want <= cnt) ? want : 0
+    if !mon {
+        try {
+            WinGetPos(&wx, &wy, &ww, &wh, S["GAME_WINDOW"])
+            cx := wx + ww // 2, cy := wy + wh // 2
+            loop cnt {
+                MonitorGet(A_Index, &l, &t, &r, &b)
+                if (cx >= l && cx < r && cy >= t && cy < b)
+                    mon := A_Index
+            }
+        }
+        if !mon
+            mon := MonitorGetPrimary()
+    }
+    MonitorGet(mon, &l, &t, &r, &b)
+    if (l = MON_X && t = MON_Y && r - l = MON_W && b - t = MON_H)
+        return
+    MON_X := l, MON_Y := t, MON_W := r - l, MON_H := b - t
+    SCALE := Min(MON_W / 2560, MON_H / 1440)
+    if !force
+        Log("Fortnite is on screen " mon " (" MON_W "x" MON_H " at " MON_X "," MON_Y ")")
+}
+
+; ============================================================
+; v7.9: fresh restart: reopen Fortnite every few hours, only in the lobby between matches
+; ============================================================
+FreshRestartTrack() {
+    global fnStartTick
+    if ProcessExist(GameExe()) {
+        if !fnStartTick
+            fnStartTick := A_TickCount
+    } else {
+        fnStartTick := 0
+    }
+}
+
+FreshRestartDue() {
+    h := Number(S["FRESH_RESTART_HOURS"])
+    return running && h > 0 && fnStartTick && A_TickCount - fnStartTick > h * 3600000
+}
+
+FreshRestart() {
+    global fnStartTick, lobbyVisit, goneSince
+    h := S["FRESH_RESTART_HOURS"]
+    Log("Fresh restart after " h " h")
+    SetStatus("🔄 " Tx("Fresh restart: reopening Fortnite"))
+    Discord("🔄 Fresh restart: Fortnite has been open for " h "+ hours, reopening it between matches.")
+    ReleaseAll()
+    try ProcessClose(GameExe())
+    fnStartTick := 0, lobbyVisit := false
+    goneSince := A_TickCount - 31000                    ; let the normal reopen kick in straight away
+    if !S["LAUNCH_FORTNITE"]
+        SetTimer(() => Run(FN_URI), -8000)
+}
+
+; ============================================================
+; v7.9: !set from your phone (safe settings only, needs your Discord user ID)
+; ============================================================
+PhoneSet(arg, authorId, who) {
+    if (Trim(String(S["DISCORD_ALLOWED_IDS"])) = "") {
+        Discord(who "for safety, ``!set`` only works after you add your Discord user ID in Settings > Phone control.")
+        return
+    }
+    list := "⚙️ **!set** what you can change:`n"
+        . "``!set mode zerobuild squad fill``   ``!set stop 8am`` / ``2h`` / ``off``   ``!set profile overnight```n"
+        . "``!set after lobby`` / ``playagain``   ``!set limit 20``   ``!set restart 6`` (hours, 0 = off)`n"
+        . "``!set volume 30``   ``!set mute on``   ``!set dim on``   ``!set fps on``   ``!set screen 2`` (0 = auto)`n"
+        . "``!set treasure on``   ``!set stopfind token`` / ``any`` / ``off``   ``!set clip on``   ``!set fill on``   ``!set squadcheck on``   ``!set recap on``"
+    p := StrSplit(Trim(arg), " ", , 2)
+    key := StrLower(p[1]), val := p.Length >= 2 ? Trim(p[2]) : ""
+    if (key = "" || val = "") {
+        Discord(who list)
+        return
+    }
+    onoff(v) => (v ~= "i)^(on|yes|1|true)$") ? 1 : (v ~= "i)^(off|no|0|false)$") ? 0 : ""
+    toggles := Map("mute", "MUTE_WHILE_RUNNING", "dim", "BLACKOUT_ON_START", "fps", "FPS_SAVER", "treasure", "WATCH_TREASURE",
+                   "clip", "TREASURE_CLIP", "squadcheck", "EMPTY_SQUAD", "recap", "WEEKLY_RECAP")
+    switch key {
+        case "stop", "timer":
+            HandleCommand("!timer " val, authorId)
+            return
+        case "profile":
+            HandleCommand("!profile " val, authorId)
+            return
+        case "mode":
+            HandleCommand("!mode " val, authorId)
+            return
+        case "after":
+            v := StrLower(StrReplace(val, " "))
+            if (v ~= "^(lobby|returntolobby|return)$")
+                SetSetting("LOBBY_AFTER_MATCH", 1)
+            else if (v ~= "^(playagain|play|again)$")
+                SetSetting("LOBBY_AFTER_MATCH", 0)
+            else
+                return Discord(who "use ``!set after lobby`` or ``!set after playagain``")
+            return Discord(who "after a match: **" (S["LOBBY_AFTER_MATCH"] ? "Return to lobby" : "Play Again") "**")
+        case "limit", "restart", "volume", "screen":
+            if !IsInteger(val)
+                return Discord(who "``!set " key "`` needs a number.")
+            n := Integer(val)
+            settingKey := Map("limit", "MATCH_LIMIT", "restart", "FRESH_RESTART_HOURS", "volume", "GAME_VOLUME", "screen", "GAME_MONITOR")[key]
+            ranges := Map("limit", [0, 10000], "restart", [0, 48], "volume", [0, 100], "screen", [0, MonitorGetCount()])[key]
+            if (n < ranges[1] || n > ranges[2])
+                return Discord(who "``!set " key "`` must be " ranges[1] " to " ranges[2] ".")
+            SetSetting(settingKey, n)
+            if (key = "volume" && running && !S["MUTE_WHILE_RUNNING"])
+                SetGameVolume(n)
+            if (key = "screen")
+                UpdateMonitor(true)
+            return Discord(who "✅ " key " set to **" n "**")
+        case "stopfind":
+            v := StrLower(val)
+            if !(v ~= "^(off|token|any)$")
+                return Discord(who "use ``!set stopfind token``, ``any`` or ``off``")
+            SetSetting("TREASURE_STOP", v)
+            return Discord(who "✅ stop when I find: **" (v = "off" ? "never" : v = "token" ? "Pirate Shop Access" : "any treasure") "**")
+        case "fill":
+            o := onoff(val)
+            if (o = "")
+                return Discord(who "use ``!set fill on`` or ``off``")
+            SetSetting("MODE_FILL", o ? "fill" : "any")
+            return Discord(who "✅ Team Fill check **" (o ? "on" : "off") "**")
+    }
+    if toggles.Has(key) {
+        o := onoff(val)
+        if (o = "")
+            return Discord(who "use ``!set " key " on`` or ``off``")
+        SetSetting(toggles[key], o)
+        if (key = "mute" && running)
+            SetGameMute(o)
+        if (key = "dim" && running)
+            ToggleBlackout(o)
+        return Discord(who "✅ " key " **" (o ? "on" : "off") "**")
+    }
+    Discord(who "I don't know ``" key "``.`n" list)
 }
