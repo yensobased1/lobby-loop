@@ -3,12 +3,13 @@
 ; Words are separated by commas. Start a word with ! to count it without Fortnite's YOU FOUND banner.
 ; Weekly prizes: prizes_<week>=Name|Type;Name|Type...   (names from https://fnchesttracker.com/tracker)
 ; Fortnite: Treasure Hunters (1 Nov - about 5 Dec 2026)
-version=2026-11-22-gizmo
+version=2026-11-23-auto
 banner=YOU FOUND,TREASURE FOUND
 token=PIRATE SHOP ACCESS,SHOP ACCESS,!PIRATE SHOP ACCESS UNLOCKED
 gizmo=GIZMO,SPRITE LOCATOR,LUCKY LOCATOR,GOLDEN FIREWORK,EXTRACTION ACCELERATOR,PORTABLE EXTRACTOR
-cosmetic=SOLID GOLD,NO TRESPASSING,PLUNDER IN PARADISE,G-WAGON,DIAMOND AND GOLD,LONDON,SO KAWAII,CADILLAC,TAKARABAKO,PPPP,MAY FORTUNE FIND YOU,CORVETTE,MIKU,MIKU'S TAKARABAKO,GOLD CHEVROLET CORVETTE ZR1,A$AP ROCKY,RUGAHAND,GOLD G-WAGON,LIL UZI VERT,GOLD CADILLAC CT5-V BLACKWING,OSCAR'S WRAPS
-week=3
+cosmetic=SOLID GOLD,NO TRESPASSING,PLUNDER IN PARADISE,G-WAGON,DIAMOND AND GOLD,LONDON,SO KAWAII,CADILLAC,TAKARABAKO,PPPP,MAY FORTUNE FIND YOU,CORVETTE,MIKU,MIKU'S TAKARABAKO,GOLD CHEVROLET CORVETTE ZR1,A$AP ROCKY,RUGAHAND,GOLD G-WAGON,LIL UZI VERT,GOLD CADILLAC CT5-V BLACKWING,OSCAR'S WRAPS,KASANE TETO,HIGH TIDE AND WAVECUTTER,WELLERMAN,GOLD LAMBORGHINI URUS SE
+week=4
 prizes_1=Solid Gold A$AP Rocky|Outfit;Solid Gold Rugahand|Pickaxe;No Trespassing|Jam Track;Plunder in Paradise|Loading screen;Gold G-Wagon|Car
 prizes_2=Solid Gold Lil Uzi Vert|Outfit;Diamond and Gold|Back bling;London|Jam Track;So Kawaii|Loading screen;Gold Cadillac CT5-V Blackwing|Car
 prizes_3=Solid Gold Miku|Outfit;Miku's Takarabako|Back bling;PPPP|Jam Track;May Fortune Find You|Loading screen;Gold Chevrolet Corvette ZR1|Car
+prizes_4=Solid Gold Kasane Teto|Outfit;Solid Gold High Tide and Wavecutter|Back bling;Wellerman|Jam Track;Oscar's Wraps|Loading screen;Gold Lamborghini Urus SE|Car
