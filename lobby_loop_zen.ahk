@@ -32,6 +32,11 @@ CHANGELOG := [
     "    screen while it starts",
     "  * Match recap: gold Pirate Shop Access icon detected, Discord gets a close-up",
     "  * New drawn icons in Settings; Lobby Loop's own windows never trigger the watcher",
+    "  + Remote play (Settings > Phone control) for Parsec / AnyDesk from your phone:",
+    "    steps aside when you move the mouse and lets go of all keys, hands back after",
+    "    60 s, shows the status box to them, brings Fortnite back to the front",
+    "  + Tells you on Discord if the PC gets locked (and waits) or the screen size changes",
+    "  + Phone: !focus, !keys, !remote on/off, !set remote on; !status shows PC time",
     "",
     "v7.9  (22 Nov 2026)",
     "  * Clicks CLAIM on the TREASURE FOUND! screen (it got stuck there before),",
@@ -316,6 +321,9 @@ DEFAULTS := [
     ["MODE_ACTION", "wait", "If the lobby is on the wrong mode: wait (and tell you) or ready (ready up anyway)"],
     ["MODE_SWITCH", 0, "1 = try to switch to your mode by itself (experimental)"],
     ["KEEP_AWAKE", 1, "1 = keep the PC from sleeping while running"],
+    ["REMOTE_MODE", 0, "1 = remote play (Parsec / AnyDesk): step aside when you move the mouse, show the status box to them"],
+    ["REMOTE_HANDS_SEC", 60, "Remote play: hand control back after this many seconds without mouse movement"],
+    ["REMOTE_REFOCUS", 1, "Remote play: bring Fortnite back to the front if it loses focus for 90 seconds"],
     ["MATCH_LIMIT", 0, "Stop after this many matches (0 = no limit)"],
     ["GAME_VOLUME", 100, "Fortnite volume while running, 0-100 (100 = leave it alone)"],
     ["STREAM_HIDE", 0, "1 = hide the status box from OBS, streams and screenshots"],
@@ -515,6 +523,10 @@ sleepWakes := 0        ; times we clicked Keep Playing this run
 stopAfterFind := ""    ; treasure found: stop when this match ends
 idleKicksRun := 0
 totalIdleKicks := Integer(IniRead(STATS_FILE, "Stats", "IdleKicks", 0))
+handsOffUntil := 0     ; remote play: you moved the mouse, Lobby Loop waits until this time
+ownMouseTick := 0      ; last time Lobby Loop itself moved the mouse
+pcLocked := false      ; Windows is locked (AnyDesk/Parsec can lock it when you leave)
+unfocusedSince := 0    ; remote play: when Fortnite lost focus
 wordsShown := Map()    ; word lists as the Settings window showed them
 dimPending := false    ; dim the screen once Fortnite is open
 fpsWaiting := false    ; FPS saver waits for Lobby Loop to open Fortnite
@@ -540,7 +552,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "SQUAD_MIN_ROWS", "SQUAD_LEAVE_SEC", "SQUAD_REGION", "CLEAN_DAYS", "CLEAN_PROOF_DAYS", "LOG_MAX_MB", "DISK_MIN_GB", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
                "BATTERY_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
-               "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME"]
+               "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME", "REMOTE_MODE", "REMOTE_HANDS_SEC", "REMOTE_REFOCUS"]
 CheckSafeMode()
 OnExit(OnExitHandler)
 OnError(OnErrorHandler)
@@ -660,6 +672,10 @@ GdipStart()
 SetTimer(() => UpdateTreasureWords(), -8000)
 SetTimer(() => UpdateTreasureWords(), 21600000)          ; and every 6 hours
 SetTimer(CheckWindowModeOnce, -15000)
+SetTimer(RemoteWatch, 250)
+OnMessage(0x7E, (*) => SetTimer(DisplayChanged, -1500))     ; screen size changed (Parsec / AnyDesk can do this)
+try DllCall("wtsapi32\WTSRegisterSessionNotification", "Ptr", A_ScriptHwnd, "UInt", 0)
+OnMessage(0x2B1, OnSessionChange)                            ; PC locked / unlocked
 SetTimer(CheckLanguageOnce, -20000)
 if (Trim(String(S["DISCORD_CHANNEL_ID"])) != "" && Trim(String(S["DISCORD_BOT_TOKEN"])) = "") {
     Log("Phone control is off: no bot token (Settings > Phone control)")
@@ -1458,10 +1474,10 @@ ForgetPopups() {
 TeachPopup() {
     MouseGetPos(&mx, &my)
     UpdateMonitor()
-    MouseMove(MON_X + 2, MON_Y + MON_H - 2, 0)        ; move away so the hover highlight goes
+    OwnMouse(), MouseMove(MON_X + 2, MON_Y + MON_H - 2, 0)        ; move away so the hover highlight goes
     Sleep(400)
     cap := Capture(MON_X, MON_Y, MON_W, MON_H)
-    MouseMove(mx, my, 0)
+    OwnMouse(), MouseMove(mx, my, 0)
     c := Px(cap, mx, my)
     tol := 12
     l := mx, r := mx, t := my, b := my
@@ -1534,7 +1550,7 @@ TryPopups() {
             continue
         ReleaseAll()
         p.last := A_TickCount
-        MouseMove(pos.x + Random(-8, 8), pos.y + Random(-4, 4), 6)
+        OwnMouse(), MouseMove(pos.x + Random(-8, 8), pos.y + Random(-4, 4), 6)
         Sleep(Random(120, 260))
         Click()
         clicks += 1
@@ -1822,6 +1838,13 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "Bring Fortnite back to the front if it loses focus", "أعد Fortnite إلى الواجهة إذا فقد التركيز",
+        "Step aside when I move the mouse (and show the status box to Parsec / AnyDesk)", "توقف عندما أحرك الماوس (وأظهر مربع الحالة في Parsec / AnyDesk)",
+        "You're in control ({1}s)", "أنت المتحكم الآن ({1} ث)",
+        "PC is locked, waiting", "الكمبيوتر مقفل، في الانتظار",
+        "Remote play (Parsec / AnyDesk from your phone)", "اللعب عن بُعد (Parsec / AnyDesk من هاتفك)",
+        "Hand back after (seconds without mouse movement):", "أعد التحكم بعد (ثوانٍ بدون حركة الماوس):",
+        "Always on: a Discord message if the PC gets locked or the screen size changes. Phone: !focus, !keys, !remote on.", "يعمل دائمًا: رسالة على Discord إذا قُفل الكمبيوتر أو تغير حجم الشاشة. الهاتف: ‎!focus و ‎!keys و ‎!remote on.",
         "A Jam Track: {1}%", "مقطع Jam Track: ‏{1}%",
         "A car: {1}%", "سيارة: {1}%",
         "A loading screen: {1}%", "شاشة تحميل: {1}%",
@@ -2392,7 +2415,7 @@ BuildOverlay() {
     fs := sz[1], W := sz[2], pad := 16, inner := sz[2] - 32
     al := IsArabic() ? " Right" : ""
     statusGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")
-    if S["STREAM_HIDE"]
+    if (S["STREAM_HIDE"] && !S["REMOTE_MODE"])          ; remote play: Parsec / AnyDesk must see it
         DllCall("SetWindowDisplayAffinity", "Ptr", statusGui.Hwnd, "UInt", 0x11)   ; hidden from OBS / screenshots
     statusGui.BackColor := "15152B"
     statusGui.MarginX := pad, statusGui.MarginY := 10
@@ -2994,6 +3017,7 @@ HandleCommand(text, authorId := "") {
                 . "🎯 ``!mode`` / ``!mode zerobuild squad fill`` / ``!mode any`` ``!servers`` ``!prizes```n"
                 . "🗓️ ``!recap``   👥 ``!teammates``   ⚙️ ``!set`` (change settings)`n"
                 . "🏴‍☠️ ``!clip`` ``!read```n"
+                . "📱 ``!focus`` (Fortnite to the front) ``!keys`` (unstick keys) ``!remote on`` / ``off```n"
                 . "🛠️ ``!version`` ``!update`` ``!reload`` ``!restartgame`` ``!closegame`` ``!sleep`` ``!shutdown`` ``!cancel```n"
                 . "Add a name to target one PC, e.g. ``!stop zen``. Power commands need your user ID in Settings > Phone control.")
         case "timer":
@@ -3022,6 +3046,22 @@ HandleCommand(text, authorId := "") {
             Discord(who "🎚️ profile: **" ProfileLabel(want) "**, stop: " DescribeStop())
         case "status":
             Discord(who StatusText())
+        case "focus":
+            if !WinExist(S["GAME_WINDOW"])
+                Discord(who "Fortnite isn't open.")
+            else {
+                try WinActivate(S["GAME_WINDOW"])
+                Sleep(400)
+                Discord(who (WinActive(S["GAME_WINDOW"]) ? "Fortnite is in front 🎯" : "couldn't bring Fortnite to the front (is the PC locked?)"))
+            }
+        case "keys":
+            ReleaseAll()
+            Discord(who "let go of every key and mouse button ⌨️")
+        case "remote":
+            v := StrLower(Trim(arg))
+            if (v = "on" || v = "off")
+                SetSetting("REMOTE_MODE", v = "on" ? 1 : 0)
+            Discord(who "remote play is **" (S["REMOTE_MODE"] ? "on" : "off") "**" (v = "" ? " (``!remote on`` / ``!remote off``)" : "") ". Restart Lobby Loop for the status box to show in Parsec / AnyDesk.")
         case "start":
             if running {
                 Discord(who "already running.")
@@ -3186,7 +3226,8 @@ StatusText() {
         s1 := "stopped."
     left := running ? TimeLeftMs() : ""
     s2 := (left != "") ? " Stops in " FormatDuration(left) "." : ""
-    return s1 s2 " All time: " totalMatches " matches, " Round(totalMinutes / 60, 1) " h."
+    s3 := " PC time " FormatTime(, "h:mm tt") ", screen " MON_W "x" MON_H (pcLocked ? ", 🔒 locked" : "") (A_TickCount < handsOffUntil ? ", 📱 you're in control" : "") "."
+    return s1 s2 " All time: " totalMatches " matches, " Round(totalMinutes / 60, 1) " h." s3
 }
 
 ; ============================================================
@@ -3645,7 +3686,7 @@ HandleScreenText(txt) {
             if (IsClaimWord(u) && ln.w > 20 && running && WinActive(S["GAME_WINDOW"])) {
                 lastClaimTick := A_TickCount
                 ReleaseAll()
-                MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+                OwnMouse(), MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
                 Sleep(150)
                 Click()
                 clicks += 1
@@ -4276,7 +4317,7 @@ SetIfChanged(ctrl, text) {
 }
 
 CanAct() {
-    return running && WinActive(S["GAME_WINDOW"])
+    return running && WinActive(S["GAME_WINDOW"]) && A_TickCount >= handsOffUntil && !pcLocked
 }
 
 SleepActive(ms) {
@@ -4319,7 +4360,7 @@ Look(dx, dy, steps := 8) {
     loop steps {
         if !CanAct()
             return
-        DllCall("mouse_event", "UInt", 0x0001, "Int", Round(dx / steps), "Int", Round(dy / steps), "UInt", 0, "UPtr", 0)
+        OwnMouse(), DllCall("mouse_event", "UInt", 0x0001, "Int", Round(dx / steps), "Int", Round(dy / steps), "UInt", 0, "UPtr", 0)
         Sleep(Random(8, 22))
     }
 }
@@ -4445,7 +4486,7 @@ TryClick(regionName) {
     gameState := regionName                         ; "lobby" or "end"
     ReleaseAll()
     lastClick[regionName] := A_TickCount
-    MouseMove(b.x + Random(-b.w // 6, b.w // 6), b.y + Random(-b.h // 6, b.h // 6), 6)
+    OwnMouse(), MouseMove(b.x + Random(-b.w // 6, b.w // 6), b.y + Random(-b.h // 6, b.h // 6), 6)
     Sleep(Random(120, 260))
     Click()
     clicks += 1
@@ -4516,6 +4557,7 @@ DoSwap() {
 ; ============================================================
 MainLoop() {
     global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil, dimPending
+    global unfocusedSince
     global lobbyVisit, modeChecked, modeRecheckTick, backToLobbyUntil, prizeWaitUntil
     if !running
         return
@@ -4529,6 +4571,19 @@ MainLoop() {
         ToggleRun("timer, " why)
         SetStatus("Stopped: " why)
         StartStopAction()
+        return
+    }
+
+    ; Windows is locked (AnyDesk / Parsec can lock it when you disconnect): nothing can be clicked
+    if pcLocked {
+        SetStatus("🔒 " Tx("PC is locked, waiting"))
+        lastProgress := A_TickCount
+        return
+    }
+    ; Remote play: you're using the mouse, so Lobby Loop waits
+    if (A_TickCount < handsOffUntil) {
+        SetStatus("📱 " Tx("You're in control ({1}s)", Ceil((handsOffUntil - A_TickCount) / 1000)))
+        lastProgress := A_TickCount
         return
     }
 
@@ -4558,12 +4613,20 @@ MainLoop() {
     }
 
     if !WinActive(S["GAME_WINDOW"]) {
+        if !unfocusedSince
+            unfocusedSince := A_TickCount
         if (A_TickCount < activateUntil)
             try WinActivate(S["GAME_WINDOW"])    ; we just opened it: bring it to the front
+        else if (S["REMOTE_MODE"] && S["REMOTE_REFOCUS"] && A_TickCount - unfocusedSince > 90000) {
+            Log("Remote play: Fortnite lost focus for 90 s, bringing it back")
+            try WinActivate(S["GAME_WINDOW"])
+            unfocusedSince := A_TickCount
+        }
         lastProgress := A_TickCount              ; watchdog only counts time spent in Fortnite
         SetStatus(Tx("Paused: click into Fortnite"))
         return
     }
+    unfocusedSince := 0
     if dimPending {
         dimPending := false
         ToggleBlackout(true)
@@ -5127,7 +5190,7 @@ TrySwitchMode(m) {
                   "build", ["BUILD", "BATTLE ROYALE"], "zerobuild", ["ZERO BUILD"], "fill", ["FILL"], "nofill", ["NO FILL", "DON'T FILL"])
     Log("Trying to switch mode from '" m.text "'")
     ReleaseAll()
-    MouseMove(m.x + m.w // 2, m.y + m.h // 2, 5)
+    OwnMouse(), MouseMove(m.x + m.w // 2, m.y + m.h // 2, 5)
     Sleep(200)
     Click()
     Sleep(2200)
@@ -5141,7 +5204,7 @@ TrySwitchMode(m) {
             u := Trim(StrUpper(ln.text))
             for lab in labels[want]
                 if (u = lab) {
-                    MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+                    OwnMouse(), MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
                     Sleep(150)
                     Click()
                     clicked := true
@@ -5536,6 +5599,12 @@ OpenSettings(startPage := 1) {
     pb := add(UiButton(g, "x" CX " y+14 w260", "🎛️ " Tx("Post the control panel")))
     pb.OnEvent("Click", (*) => ShowTip(PanelCreate() ? Tx("Sent to Discord") : Tx("Couldn't send to Discord"), 2500))
     hint(Tx("Type !help in your channel to see all 30+ commands. Change settings with !set (type !set to see them)."), "y+10")
+    say(Tx("Remote play (Parsec / AnyDesk from your phone)"), "y+18")
+    tick("REMOTE_MODE", "Step aside when I move the mouse (and show the status box to Parsec / AnyDesk)", "y+6")
+    say(Tx("Hand back after (seconds without mouse movement):"), "y+6")
+    edit("REMOTE_HANDS_SEC", "y+4 w120")
+    tick("REMOTE_REFOCUS", "Bring Fortnite back to the front if it loses focus", "y+8")
+    hint(Tx("Always on: a Discord message if the PC gets locked or the screen size changes. Phone: !focus, !keys, !remote on."))
 
     ; ---- 11. Look ----
     newPage(Tx("Look"), Tx("Language, theme and the status box."))
@@ -5721,11 +5790,13 @@ SaveSettingsGui(g, c) {
                     "DISK_MIN_GB", num("DISK_MIN_GB", Tx("Warn when a drive has less than (GB, 0 = off):"), 0, 1000),
                     "GAME_VOLUME", num("GAME_VOLUME", Tx("Or set Fortnite's volume while running (0-100, 100 = leave it):"), 0, 100),
                     "CLIP_DELAY", num("CLIP_DELAY", Tx("Wait (seconds)"), 0, 60),
-                    "AUTO_SCREENSHOT_MIN", num("AUTO_SCREENSHOT_MIN", Tx("Screenshot to Discord every (minutes, 0 = off):"), 0, 1440))
+                    "AUTO_SCREENSHOT_MIN", num("AUTO_SCREENSHOT_MIN", Tx("Screenshot to Discord every (minutes, 0 = off):"), 0, 1440),
+                    "REMOTE_HANDS_SEC", num("REMOTE_HANDS_SEC", Tx("Hand back after (seconds without mouse movement):"), 5, 3600))
     } catch as e {
         return bad(e.Message)
     }
     oldStream := S["STREAM_HIDE"] ? 1 : 0
+    oldRemote := S["REMOTE_MODE"] ? 1 : 0
     clipKey := Trim(c["CLIP_KEY"].Value)
     if (clipKey != "" && !ValidHotkey(clipKey))
         return bad("'" clipKey "' isn't a key Lobby Loop can press (examples: F8, ^!c, +F9).")
@@ -5764,7 +5835,7 @@ SaveSettingsGui(g, c) {
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
                 "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF",
                 "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WEEKLY_RECAP", "EMPTY_SQUAD", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
-                "KEEP_AWAKE", "STREAM_HIDE",
+                "KEEP_AWAKE", "STREAM_HIDE", "REMOTE_MODE", "REMOTE_REFOCUS",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
         if c.Has(key)
@@ -5811,7 +5882,7 @@ SaveSettingsGui(g, c) {
     newStyle := (c["STYLE"].Value = 2) ? "mini" : "card"
     newAccent := ["yellow", "purple", "cyan", "pink", "green"][c["ACCENT"].Value]
     needReload := keysChanged || (newLang != S["LANG"]) || (newTheme != S["THEME"]) || (newSize != StrLower(S["OVERLAY_SIZE"]))
-        || (newStyle != StrLower(S["OVERLAY_STYLE"])) || (newAccent != StrLower(S["ACCENT"])) || (oldStream != c["STREAM_HIDE"].Value)
+        || (newStyle != StrLower(S["OVERLAY_STYLE"])) || (newAccent != StrLower(S["ACCENT"])) || (oldStream != c["STREAM_HIDE"].Value) || (oldRemote != c["REMOTE_MODE"].Value)
     SetSetting("OVERLAY_STYLE", newStyle)
     SetSetting("ACCENT", newAccent)
     SetSetting("LANG", newLang)
@@ -5859,7 +5930,7 @@ WakeFromSleep(lines) {
         sleepWakes += 1
         BumpWeek("SleepWakes")
         ReleaseAll()
-        MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+        OwnMouse(), MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
         Sleep(200)
         Click()
         clicks += 1
@@ -6030,7 +6101,7 @@ LobbyProof(lines, joined) {
         return true
     Sleep(400)
     ReleaseAll()
-    MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
+    OwnMouse(), MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
     Sleep(180)
     Click()
     clicks += 1
@@ -6090,7 +6161,7 @@ KnownPopup(lines, joined) {
     if !(running && WinActive(S["GAME_WINDOW"]))
         return true
     ReleaseAll()
-    MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
+    OwnMouse(), MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
     Sleep(180)
     Click()
     clicks += 1
@@ -6358,7 +6429,7 @@ ReturnToLobbyClick() {
     clickLine(ln) {
         global clicks
         ReleaseAll()
-        MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+        OwnMouse(), MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
         Sleep(180)
         Click()
         clicks += 1
@@ -7133,7 +7204,7 @@ ClaimPrizeScreen(lines, joined) {
     x := IsObject(btn) ? btn.x + btn.w // 2 : MON_X + MON_W // 2
     y := IsObject(btn) ? btn.y + btn.h // 2 : MON_Y + Round(MON_H * 0.884)
     ReleaseAll()
-    MouseMove(x, y, 5)
+    OwnMouse(), MouseMove(x, y, 5)
     Sleep(180)
     Click()
     clicks += 1
@@ -7180,6 +7251,73 @@ UpdateMonitor(force := false) {
 }
 
 ; ============================================================
+; v7.9.1: remote play (Parsec / AnyDesk from your phone)
+; ============================================================
+OwnMouse() {
+    global ownMouseTick
+    ownMouseTick := A_TickCount
+}
+
+; You moved the mouse (Lobby Loop didn't): it lets go of everything and waits
+RemoteWatch() {
+    global handsOffUntil
+    static lx := "", ly := ""
+    if !S["REMOTE_MODE"] {
+        lx := ""
+        return
+    }
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&x, &y)
+    if (lx = "") {
+        lx := x, ly := y
+        return
+    }
+    moved := Abs(x - lx) + Abs(y - ly)
+    lx := x, ly := y
+    if (moved < 25 || A_TickCount - ownMouseTick < 1200)
+        return
+    if (Abs(x - (MON_X + MON_W // 2)) <= 4 && Abs(y - (MON_Y + MON_H // 2)) <= 4)
+        return                                          ; Fortnite put the cursor in the middle (a match started)
+    if (running && A_TickCount >= handsOffUntil) {
+        ReleaseAll()                                    ; no stuck W / Shift while you play
+        Log("Remote play: you moved the mouse, Lobby Loop waits")
+    }
+    handsOffUntil := A_TickCount + Max(5, Number(S["REMOTE_HANDS_SEC"])) * 1000
+}
+
+DisplayChanged() {
+    ow := MON_W, oh := MON_H
+    UpdateMonitor(true)
+    if (ow = MON_W && oh = MON_H)
+        return
+    Log("Screen size changed: " ow "x" oh " -> " MON_W "x" MON_H)
+    try PlaceOverlay()
+    if (blackoutGui != "") {
+        ToggleBlackout(false)
+        ToggleBlackout(true)
+    }
+    if running
+        Discord("🖥️ **" PlayerName() "**: screen changed to " MON_W "x" MON_H " (Parsec / AnyDesk can do this). Lobby Loop adjusted, but buttons are found best at your normal size.")
+}
+
+OnSessionChange(wParam, lParam, *) {
+    global pcLocked
+    if (wParam = 7) {
+        pcLocked := true
+        Log("PC locked")
+        if running {
+            Discord("🔒 **" PlayerName() "**: the PC got **locked**, so Lobby Loop can't click anything. It waits and carries on when unlocked. Tip: in AnyDesk turn off *Lock account on session end*; in Parsec turn off *Lock on disconnect*.")
+            NtfyPush("PC locked", "Lobby Loop can't click while Windows is locked.", 4, "lock")
+        }
+    } else if (wParam = 8) {
+        pcLocked := false
+        Log("PC unlocked")
+        if running
+            Discord("🔓 **" PlayerName() "**: unlocked, carrying on.")
+    }
+}
+
+; ============================================================
 ; v7.9: fresh restart: reopen Fortnite every few hours, only in the lobby between matches
 ; ============================================================
 FreshRestartTrack() {
@@ -7223,7 +7361,7 @@ PhoneSet(arg, authorId, who) {
         . "``!set mode zerobuild squad fill``   ``!set stop 8am`` / ``2h`` / ``off``   ``!set profile overnight```n"
         . "``!set after lobby`` / ``playagain``   ``!set limit 20``   ``!set restart 6`` (hours, 0 = off)`n"
         . "``!set volume 30``   ``!set mute on``   ``!set dim on``   ``!set fps on``   ``!set screen 2`` (0 = auto)`n"
-        . "``!set treasure on``   ``!set stopfind token`` / ``any`` / ``off``   ``!set clip on``   ``!set fill on``   ``!set squadcheck on``   ``!set recap on``"
+        . "``!set treasure on``   ``!set stopfind token`` / ``any`` / ``off``   ``!set clip on``   ``!set fill on``   ``!set squadcheck on``   ``!set recap on``   ``!set remote on``"
     p := StrSplit(Trim(arg), " ", , 2)
     key := StrLower(p[1]), val := p.Length >= 2 ? Trim(p[2]) : ""
     if (key = "" || val = "") {
@@ -7232,7 +7370,7 @@ PhoneSet(arg, authorId, who) {
     }
     onoff(v) => (v ~= "i)^(on|yes|1|true)$") ? 1 : (v ~= "i)^(off|no|0|false)$") ? 0 : ""
     toggles := Map("mute", "MUTE_WHILE_RUNNING", "dim", "BLACKOUT_ON_START", "fps", "FPS_SAVER", "treasure", "WATCH_TREASURE",
-                   "clip", "TREASURE_CLIP", "squadcheck", "EMPTY_SQUAD", "recap", "WEEKLY_RECAP")
+                   "clip", "TREASURE_CLIP", "squadcheck", "EMPTY_SQUAD", "recap", "WEEKLY_RECAP", "remote", "REMOTE_MODE")
     switch key {
         case "stop", "timer":
             HandleCommand("!timer " val, authorId)
