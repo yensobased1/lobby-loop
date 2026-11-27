@@ -37,6 +37,8 @@ CHANGELOG := [
     "  + !set: change settings from your phone (mode, stop, after a match, volume...)",
     "  + Multi-monitor: works on the screen Fortnite is on (or pick one in Settings > Look)",
     "  + Settings: Lobby Loop's own icon set on every section, page and setting",
+    "  + Match recap: TREASURE FOUND: with only an icon now counts. A gold icon counts as",
+    "    Pirate Shop Access, and Discord gets a close-up of the icon",
     "",
     "v7.8  (18 Nov 2026)",
     "  + Weekly prizes update by themselves (a GitHub job reads fnchesttracker.com)",
@@ -4765,6 +4767,7 @@ CheckTreasure(lines) {
     foundWords := WordList(S["TREASURE_FOUND_WORDS"])
     hits := []
     for ln in lines {
+        img := ""
         u := StrUpper(ln.text)
         if TreasureNoise(u)
             continue
@@ -4781,28 +4784,44 @@ CheckTreasure(lines) {
                 if (other != ln && Abs(other.y - ln.y) < Max(ln.h, 20) * 3 && other.x >= ln.x - W * 0.05
                     && Abs((other.x + other.w / 2) - (ln.x + ln.w / 2)) < W * 0.25 && !TreasureNoise(StrUpper(other.text)))
                     txt .= " " other.text
+            img := ""
             if IsObject(item := PrizeFromScreen(lines))
                 txt := item.name " (" item.type ")"
             cat := TreasureCategoryFor(StrUpper(txt), true)
+            ; match recap: "TREASURE FOUND:" with only an icon under it (no name)
+            if (!IsObject(item) && RegExMatch(StrUpper(Trim(txt)), "^TREASURE FOUND\W*$")) {
+                ic := RecapIcon(ln)
+                img := ic.path
+                if ic.gold {
+                    txt := "Pirate Shop Access (gold icon)"
+                    for c2 in TreasureCategories()
+                        if (c2.key = "token")
+                            cat := c2
+                    if (!IsObject(cat) || cat.key != "token")
+                        cat := {key: "token", name: "Pirate Shop Access", words: []}
+                } else {
+                    txt := "Treasure (icon on the match recap)"
+                }
+            }
         } else {
             txt := ln.text
             cat := TreasureCategoryFor(u, false)            ; only ! words count without the banner
         }
         if IsObject(cat)
-            hits.Push([txt, cat])
+            hits.Push([txt, cat, img])
     }
     for h in hits {
         k := h[2].key ":" StrUpper(h[1])
         if (seen.Has(k) && A_TickCount - seen[k] < (h[2].key = "token" ? 1800000 : 180000))
             continue                                        ; Pirate Shop Access screens stay up: count it once
         seen[k] := A_TickCount
-        TreasureFound(Trim(h[1]), h[2])
+        TreasureFound(Trim(h[1]), h[2], h[3])
         TreasureStopCheck(Trim(h[1]), h[2])
         break                                               ; one find per screen
     }
 }
 
-TreasureFound(text, cat := "") {
+TreasureFound(text, cat := "", img := "") {
     global treasureCount, lastTreasure
     catKey := IsObject(cat) ? cat.key : "custom"
     catName := IsObject(cat) ? Tx(cat.name) : Tx("Treasure")
@@ -4832,7 +4851,9 @@ TreasureFound(text, cat := "") {
     if (DiscordReady() && S["TREASURE_DISCORD"]) {
         shot := A_Temp "\ll_treasure.png"
         sent := false
-        if S["TREASURE_SCREENSHOT"] {
+        if (img != "" && FileExist(img))                ; close-up of the prize icon
+            sent := DiscordFile(msg, img)
+        if (S["TREASURE_SCREENSHOT"] && !sent) {
             try FileCopy(A_Temp "\ll_screen.png", shot, 1)
             sent := FileExist(shot) && DiscordFile(msg, shot)
         }
@@ -7595,4 +7616,65 @@ AddSettingsIcons(g, pages, navs, sections) {
             pg.Push(p)
         }
     }
+}
+
+; ============================================================
+; v7.9: the match recap shows "TREASURE FOUND:" and only an icon (no name).
+; Look at the icons under the label: Pirate Shop Access is a gold square with an F compass.
+; ============================================================
+RecapIcon(label) {
+    lh := Max(16, label.h)
+    x := Max(MON_X, label.x - 10), y := label.y + lh + lh // 2
+    w := Min(Round(MON_W * 0.30), MON_X + MON_W - x), h := Min(lh * 5, MON_Y + MON_H - y)
+    out := {gold: false, ratio: 0, path: ""}
+    if (w < 40 || h < 40)
+        return out
+    path := A_Temp "\ll_recap_icon.png"
+    try FileDelete(path)
+    if SaveRegionImage(path, x, y, w, h)
+        out.path := path
+    cap := Capture(x, y, w, h)
+    cell := 10, cols := w // cell, rows := h // cell
+    grid := []
+    loop rows {
+        r := A_Index - 1
+        row := []
+        loop cols {
+            cx := x + (A_Index - 1) * cell, cy := y + r * cell, n := 0, g := 0
+            loop 5 {
+                py := cy + (A_Index - 1) * 2
+                loop 5 {
+                    c := Px(cap, cx + (A_Index - 1) * 2, py)
+                    if (c < 0)
+                        continue
+                    n += 1
+                    rr := (c >> 16) & 0xFF, gg := (c >> 8) & 0xFF, bb := c & 0xFF
+                    if (rr > 170 && gg > 110 && bb < 110 && rr >= gg && rr - bb > 90)
+                        g += 1
+                }
+            }
+            row.Push(n ? g / n : 0)
+        }
+        grid.Push(row)
+    }
+    win := Max(3, Round(lh * 3.2 / cell))               ; an icon is about 3 label-heights wide
+    best := 0
+    loop Max(1, rows - win + 1) {
+        r0 := A_Index
+        loop Max(1, cols - win + 1) {
+            c0 := A_Index, sum := 0, cnt := 0
+            loop Min(win, rows - r0 + 1) {
+                rr := r0 + A_Index - 1
+                loop Min(win, cols - c0 + 1) {
+                    sum += grid[rr][c0 + A_Index - 1]
+                    cnt += 1
+                }
+            }
+            best := Max(best, cnt ? sum / cnt : 0)
+        }
+    }
+    out.ratio := Round(best, 2)
+    out.gold := best >= 0.25
+    Log("Recap icon gold: " Round(best * 100) "%")
+    return out
 }
