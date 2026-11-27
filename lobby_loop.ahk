@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.9.0
+;@Ahk2Exe-SetVersion 7.9.1
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.9"
+VERSION := "7.9.1"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,17 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.9.1  (27 Nov 2026) - bug fixes",
+    "  * Online treasure words never reached some PCs (Settings > Save put the old",
+    "    lists back). Now they're added to your lists every time, your own words stay",
+    "  * GIZMO and PIRATE SHOP ACCESS always count, even if your word lists miss them",
+    "  * OCR slips (one wrong letter, missing spaces, e.g. SPRITEGIZMO) still match",
+    "  * The match recap's TREASURE FOUND: counts once per match, not twice",
+    "  * Dim screen waits until Fortnite is open, so you're not left with a black",
+    "    screen while it starts",
+    "  * Match recap: gold Pirate Shop Access icon detected, Discord gets a close-up",
+    "  * New drawn icons in Settings; Lobby Loop's own windows never trigger the watcher",
+    "",
     "v7.9  (22 Nov 2026)",
     "  * Clicks CLAIM on the TREASURE FOUND! screen (it got stuck there before),",
     "    one prize after another, and saves the item name (e.g. Oscar's Wraps, Loading screen)",
@@ -504,6 +515,8 @@ sleepWakes := 0        ; times we clicked Keep Playing this run
 stopAfterFind := ""    ; treasure found: stop when this match ends
 idleKicksRun := 0
 totalIdleKicks := Integer(IniRead(STATS_FILE, "Stats", "IdleKicks", 0))
+wordsShown := Map()    ; word lists as the Settings window showed them
+dimPending := false    ; dim the screen once Fortnite is open
 fpsWaiting := false    ; FPS saver waits for Lobby Loop to open Fortnite
 backToLobbyUntil := 0  ; just clicked Return to lobby: don't walk while the lobby loads
 prizeWaitUntil := 0    ; in the lobby: wait for prize screens until this time
@@ -732,8 +745,9 @@ ValidKey(keyName) {
 ToggleRun(reason := "you") {
     global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned, lastNudgeTick, sleepWakes, stopAfterFind, idleKicksRun
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
-    global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries
+    global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries, dimPending
     autoStartArmed := false
+    dimPending := false
 
     ; A stop action is counting down: this key cancels it
     if (pendingAction != "") {
@@ -775,8 +789,12 @@ ToggleRun(reason := "you") {
         FpsApply()
         if fpsWaiting
             ShowTip(Tx("FPS saver starts the next time Lobby Loop opens Fortnite."), 3500)
-        if S["BLACKOUT_ON_START"]
-            ToggleBlackout(true)
+        if S["BLACKOUT_ON_START"] {
+            if WinExist(S["GAME_WINDOW"])
+                ToggleBlackout(true)
+            else
+                dimPending := true                       ; dims once Fortnite is open (no black screen while it starts)
+        }
         gameState := ""
         if (S["LIVE_STATUS"] && DiscordReady())
             SetTimer(() => LiveUpdate(), -1500)
@@ -4497,7 +4515,7 @@ DoSwap() {
 ; Main loop
 ; ============================================================
 MainLoop() {
-    global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil
+    global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil, dimPending
     global lobbyVisit, modeChecked, modeRecheckTick, backToLobbyUntil, prizeWaitUntil
     if !running
         return
@@ -4545,6 +4563,10 @@ MainLoop() {
         lastProgress := A_TickCount              ; watchdog only counts time spent in Fortnite
         SetStatus(Tx("Paused: click into Fortnite"))
         return
+    }
+    if dimPending {
+        dimPending := false
+        ToggleBlackout(true)
     }
 
     ; Stuck watchdog
@@ -4722,10 +4744,65 @@ TreasureCategories() {
               ["custom", "My own words", ""], ["cosmetic", "Treasure", "TREASURE_COSMETIC"]] {
         on := (c[3] = "") ? true : S[c[3]]
         words := (c[3] = "") ? S["TREASURE_WORDS"] : S[c[3] "_WORDS"]
+        if (c[1] = "token")
+            words := MergeWords("PIRATE SHOP ACCESS", words)     ; always counts
+        else if (c[1] = "gizmo")
+            words := MergeWords("GIZMO", words)
         if on
             cats.Push({key: c[1], name: c[2], words: WordList(words)})
     }
     return cats
+}
+
+; Joins two comma lists without repeats (online first, then the ones only you have)
+MergeWords(online, mine) {
+    out := [], seen := Map()
+    for src in [online, mine]
+        for w in StrSplit(String(src), ",", " `t")
+            if (w != "" && !seen.Has(k := StrUpper(w))) {
+                seen[k] := 1
+                out.Push(w)
+            }
+    txt := ""
+    for w in out
+        txt .= (txt = "" ? "" : ",") w
+    return txt
+}
+
+; One wrong, missing or extra letter (OCR slips). Both are PrizeKey() text.
+FuzzyIn(hay, needle) {
+    n := StrLen(needle)
+    if (n < 6 || StrLen(hay) < n - 1)
+        return false
+    loop StrLen(hay) - (n - 1) + 1 {
+        i := A_Index
+        for len in [n - 1, n, n + 1]
+            if (i + len - 1 <= StrLen(hay) && EditDist1(SubStr(hay, i, len), needle))
+                return true
+    }
+    return false
+}
+
+EditDist1(a, b) {
+    la := StrLen(a), lb := StrLen(b)
+    if (Abs(la - lb) > 1)
+        return false
+    i := 1, j := 1, diff := 0
+    while (i <= la && j <= lb) {
+        if (SubStr(a, i, 1) == SubStr(b, j, 1)) {
+            i += 1, j += 1
+            continue
+        }
+        if (++diff > 1)
+            return false
+        if (la > lb)
+            i += 1
+        else if (lb > la)
+            j += 1
+        else
+            i += 1, j += 1
+    }
+    return diff + (la - i + 1) + (lb - j + 1) <= 1
 }
 
 WordList(text) {
@@ -4751,7 +4828,8 @@ TreasureCategoryFor(u, banner) {
         for w in cat.words {
             strong := (SubStr(w, 1, 1) = "!")
             w2 := LTrim(w, "!")
-            if (w2 != "" && (InStr(u, w2) || (StrLen(w2) >= 5 && InStr(PrizeKey(u), PrizeKey(w2)))) && (banner || strong))
+            if (w2 != "" && (banner || strong)
+                && (InStr(u, w2) || (StrLen(w2) >= 5 && InStr(PrizeKey(u), PrizeKey(w2))) || FuzzyIn(PrizeKey(u), PrizeKey(w2))))
                 return cat
         }
     if banner
@@ -4762,7 +4840,7 @@ TreasureCategoryFor(u, banner) {
 }
 
 CheckTreasure(lines) {
-    static seen := Map()
+    static seen := Map(), recapMatch := -1
     W := MON_W, H := MON_H
     foundWords := WordList(S["TREASURE_FOUND_WORDS"])
     hits := []
@@ -4790,6 +4868,9 @@ CheckTreasure(lines) {
             cat := TreasureCategoryFor(StrUpper(txt), true)
             ; match recap: "TREASURE FOUND:" with only an icon under it (no name)
             if (!IsObject(item) && RegExMatch(StrUpper(Trim(txt)), "^TREASURE FOUND\W*$")) {
+                if (recapMatch = totalMatches)
+                    continue                                    ; this match's recap was already counted
+                recapMatch := totalMatches
                 ic := RecapIcon(ln)
                 img := ic.path
                 if ic.gold {
@@ -5160,6 +5241,7 @@ SetGameVolume(pct) {
 ; v7.6: Settings window (12 sections)
 ; ============================================================
 OpenSettings(startPage := 1) {
+    global wordsShown
     g := ThemeGui(TITLE " - " Tx("Settings"))
     c := Map()
     pages := []
@@ -5546,6 +5628,10 @@ OpenSettings(startPage := 1) {
     g.Add("Text", "x" CX " y636 w" CW " h1 Background" UiCol("line"))
     saveBtn := UiButton(g, "x" (CX + CW - 250) " y650 w120 Default", Tx("Save"))
     saveBtn.OnEvent("Click", (*) => SaveSettingsGui(g, c))
+    wordsShown := Map()
+    for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS", "TREASURE_FOUND_WORDS"]
+        if c.Has(key)
+            wordsShown[key] := Trim(c[key].Value)
     cancelBtn := UiButton(g, "x+10 yp w120", Tx("Cancel"))
     cancelBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
@@ -5579,7 +5665,7 @@ ShowModeCheck(waitMs := 0) {
 }
 
 SaveSettingsGui(g, c) {
-    global botLastId, botFails, watchMinutes
+    global botLastId, botFails, watchMinutes, wordsShown
     bad(msg) => MsgBox(msg, TITLE, "Icon! Owner" g.Hwnd)
     num(key, label, lo, hi) {
         v := Trim(c[key].Value)
@@ -5686,7 +5772,8 @@ SaveSettingsGui(g, c) {
     for key, v in nums
         SetSetting(key, v)
     for key in ["TREASURE_GIZMO_WORDS", "TREASURE_COSMETIC_WORDS", "TREASURE_TOKEN_WORDS", "TREASURE_WORDS", "TREASURE_FOUND_WORDS"]
-        SetSetting(key, Trim(c[key].Value))
+        if (!wordsShown.Has(key) || Trim(c[key].Value) != wordsShown[key])
+            SetSetting(key, Trim(c[key].Value))          ; changed here (an online update while the window was open is kept)
     SetSetting("CLIP_KEY", clipKey)
     SetSetting("CLIP_METHOD", ["gamebar", "nvidia", "custom"][c["CLIP_METHOD"].Value])
     SetSetting("MODE_TEAM", ["any", "solo", "duo", "trio", "squad"][c["MODE_TEAM"].Value])
@@ -5834,14 +5921,17 @@ UpdateTreasureWords(manual := false) {
         Log("treasure_words.txt has no version= line")
         return false
     }
-    if (!manual && vals["version"] = String(S["TREASURE_ONLINE_VERSION"]))
-        return false                                   ; already have these
     changed := 0
     for pair in [["token", "TREASURE_TOKEN_WORDS"], ["gizmo", "TREASURE_GIZMO_WORDS"], ["cosmetic", "TREASURE_COSMETIC_WORDS"], ["banner", "TREASURE_FOUND_WORDS"]]
-        if (vals.Has(pair[1]) && vals[pair[1]] != String(S[pair[2]])) {
-            SetSetting(pair[2], vals[pair[1]])
-            changed += 1
+        if vals.Has(pair[1]) {
+            merged := MergeWords(vals[pair[1]], S[pair[2]])     ; online words first, your own words kept
+            if (merged != String(S[pair[2]])) {
+                SetSetting(pair[2], merged)
+                changed += 1
+            }
         }
+    if (!manual && !changed && vals["version"] = String(S["TREASURE_ONLINE_VERSION"]))
+        return false                                   ; already have these
     SetSetting("TREASURE_ONLINE_VERSION", vals["version"])
     if vals.Has("week") {
         try IniDelete(STATS_FILE, "WeeklyPrizes")
