@@ -14,16 +14,47 @@ if not defined A2E (
   exit /b
 )
 
+rem ---- close Lobby Loop first: a running .exe is locked and can't be replaced ----
+set "CLOSED="
+for %%E in (lobby_loop.exe lobby_loop_zen.exe) do (
+  tasklist /fi "imagename eq %%E" 2>nul | find /i "%%E" >nul && (
+    echo Closing %%E so it can be rebuilt...
+    taskkill /im %%E >nul 2>nul
+    set "CLOSED=1"
+  )
+)
+if defined CLOSED timeout /t 3 /nobreak >nul
+for %%E in (lobby_loop.exe lobby_loop_zen.exe) do taskkill /f /im %%E >nul 2>nul
+
 rem ---- build an .exe for every Lobby Loop script in this folder ----
+set "FAILS=0"
 for %%F in (lobby_loop.ahk lobby_loop_zen.ahk) do (
   if exist "%%F" (
     echo Building %%~nF.exe ...
-    start "" /wait "%A2E%" /in "%%F" /out "%%~nF.exe" /base "%AHK%" /silent
-    if exist "%%~nF.exe" (echo   OK: %%~nF.exe) else (echo   FAILED: %%F)
+    if exist "%%~nF.exe.bak" del "%%~nF.exe.bak" >nul 2>nul
+    if exist "%%~nF.exe" ren "%%~nF.exe" "%%~nF.exe.bak" >nul 2>nul
+    if exist "%%~nF.exe" (
+      echo   FAILED: %%~nF.exe is still in use. Close Lobby Loop from the tray and run this again.
+      set /a FAILS+=1
+    ) else (
+      start "" /wait "%A2E%" /in "%%F" /out "%%~nF.exe" /base "%AHK%" /silent
+      if exist "%%~nF.exe" (
+        echo   OK: %%~nF.exe ^(new^)
+        del "%%~nF.exe.bak" >nul 2>nul
+      ) else (
+        echo   FAILED: the compiler couldn't build %%F. Your old .exe was put back.
+        if exist "%%~nF.exe.bak" ren "%%~nF.exe.bak" "%%~nF.exe" >nul 2>nul
+        set /a FAILS+=1
+      )
+    )
   )
 )
 echo.
-echo Done. Send your friend the .exe file (for example lobby_loop_zen.exe).
+if %FAILS% gtr 0 (
+  echo %FAILS% build^(s^) failed, see above.
+) else (
+  echo Done. Both .exe files are new. Send your friend lobby_loop_zen.exe.
+)
 pause
 exit /b
 
