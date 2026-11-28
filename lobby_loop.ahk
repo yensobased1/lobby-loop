@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.9.1
+;@Ahk2Exe-SetVersion 7.9.2
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.9.1"
+VERSION := "7.9.2"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,8 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v7.9.2  (28 Nov 2026) - Settings sidebar buttons are back",
+    "",
     "v7.9.1  (27 Nov 2026) - bug fixes",
     "  * Online treasure words never reached some PCs (Settings > Save put the old",
     "    lists back). Now they're added to your lists every time, your own words stay",
@@ -5355,7 +5357,8 @@ OpenSettings(startPage := 1) {
     COL2 := 320                                       ; second column offset
 
     ; sidebar
-    g.Add("Text", "x0 y0 w200 h710 Background" UiCol("side"))
+    sideBg := g.Add("Text", "x0 y0 w200 h710 Background" UiCol("side"))
+    DllCall("SetWindowPos", "Ptr", sideBg.Hwnd, "Ptr", 1, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x13)   ; behind everything, or the section buttons vanish
     UiText(g, "x20 y18 w170", "🔁 " TITLE, "head", UiCol("side"))
     UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
     sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"], ["🎬", "Alerts & clips"],
