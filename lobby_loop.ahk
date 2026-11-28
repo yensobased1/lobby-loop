@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 8.1.0
+;@Ahk2Exe-SetVersion 8.1.1
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "8.1"
+VERSION := "8.1.1"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,16 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.1.1  (28 Nov 2026)",
+    "  + Treasure: you can leave Pirate Shop Access unclaimed. Lobby Loop takes the",
+    "    screenshot, tells you on Discord and your phone, and stops so you claim it",
+    "  + Schedule: restart Fortnite after X minutes without a match (0 = off). It waits",
+    "    instead while Fortnite's servers are down",
+    "  + Mode: if Fortnite jumps to another mode (Reload, LEGO, Festival, Ranked...),",
+    "    Lobby Loop switches back to Battle Royale (or Zero Build) and never readies up",
+    "    in the wrong game. Before, modes like Reload counted as 'Squads' and passed",
+    "  + Phone: !set nomatch 45, !set claimtoken off, !set brguard on",
+    "",
     "v8.1  (28 Nov 2026) - tidier Settings",
     "  * 14 sections are now 10: Play has tabs for Play | Mode | Squad fill, Treasure",
     "    for Treasure | Alerts & clips, and Discord & phone for Discord alerts | Phone",
@@ -355,6 +365,9 @@ DEFAULTS := [
     ["MODE_FILL", "any", "Fill: any, fill or nofill"],
     ["MODE_ACTION", "wait", "If the lobby is on the wrong mode: wait (and tell you) or ready (ready up anyway)"],
     ["MODE_SWITCH", 0, "1 = try to switch to your mode by itself (experimental)"],
+    ["BR_GUARD", 1, "1 = if Fortnite switches to another mode (Reload, LEGO, Festival...), switch back to Battle Royale"],
+    ["NO_MATCH_RESTART_MIN", 0, "Restart Fortnite when no match started for this many minutes (0 = off)"],
+    ["CLAIM_TOKEN", 1, "1 = claim Pirate Shop Access by itself; 0 = screenshot it, leave it unclaimed and stop"],
     ["KEEP_AWAKE", 1, "1 = keep the PC from sleeping while running"],
     ["REMOTE_MODE", 0, "1 = remote play (Parsec / AnyDesk): step aside when you move the mouse, show the status box to them"],
     ["REMOTE_HANDS_SEC", 60, "Remote play: hand control back after this many seconds without mouse movement"],
@@ -576,6 +589,7 @@ serverFetches := 0     ; how many times the Epic status page was really read
 SETTINGS_GROUPS := []  ; settings sidebar: [[page numbers], name] per sidebar button
 SETTINGS_TABS := Map()  ; settings tabs: tab text hwnd -> [control, page number]
 NAV_ICONS := Map()     ; settings sidebar: nav text hwnd -> [picture, folder, icon]
+lastMatchEndTick := 0     ; v8.1: last time a match ended (or the run started), for the no-match restart
 fnStartTick := 0       ; when Fortnite was (last seen) started, for the fresh restart
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
                 ["%F0%9F%93%8A", "status"], ["%F0%9F%8C%99", "dim"]]
@@ -590,7 +604,7 @@ SHARE_KEYS := ["PROFILE", "STOP_AFTER_HOURS", "STOP_AFTER_MINUTES", "STOP_AT_TIM
                "SQUAD_MIN_ROWS", "SQUAD_LEAVE_SEC", "SQUAD_REGION", "CLEAN_DAYS", "CLEAN_PROOF_DAYS", "LOG_MAX_MB", "DISK_MIN_GB", "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_MIN",
                "BATTERY_SLEEP", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD", "TREASURE_SCREENSHOT",
                "TREASURE_CLIP", "CLIP_METHOD", "CLIP_DELAY", "CLIP_UPLOAD", "MODE_TEAM", "MODE_BUILD", "MODE_FILL",
-               "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME", "REMOTE_MODE", "REMOTE_HANDS_SEC", "REMOTE_REFOCUS"]
+               "MODE_ACTION", "MODE_SWITCH", "KEEP_AWAKE", "MATCH_LIMIT", "GAME_VOLUME", "REMOTE_MODE", "REMOTE_HANDS_SEC", "REMOTE_REFOCUS", "BR_GUARD", "NO_MATCH_RESTART_MIN", "CLAIM_TOKEN"]
 CheckSafeMode()
 OnExit(OnExitHandler)
 OnError(OnErrorHandler)
@@ -803,9 +817,10 @@ ValidKey(keyName) {
 ToggleRun(reason := "you") {
     global gameState, lobbyVisit, modeChecked, modeRecheckTick, modeWarned, lastNudgeTick, sleepWakes, stopAfterFind, idleKicksRun
     global running, sessionStart, sessionStartTime, matches, clicks, pendingAction, autoStartArmed
-    global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries, dimPending
+    global totalMinutes, lastProgress, unstickTries, goneSince, launchTick, launchTries, dimPending, lastMatchEndTick
     autoStartArmed := false
     dimPending := false
+    lastMatchEndTick := A_TickCount
 
     ; A stop action is counting down: this key cancels it
     if (pendingAction != "") {
@@ -2036,6 +2051,16 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "If Fortnite switches to another mode (Reload, LEGO, Festival...), switch back to Battle Royale", "إذا انتقل Fortnite إلى وضع آخر (Reload أو LEGO أو Festival...) فارجع إلى Battle Royale",
+        "Restart Fortnite if no match started for this many minutes (0 = off):", "أعد تشغيل Fortnite إذا لم تبدأ مباراة خلال هذا العدد من الدقائق (0 = إيقاف):",
+        "For when Fortnite gets stuck in menus or queues. It waits instead if Fortnite's servers are down.", "لحالات تعلق Fortnite في القوائم أو الطوابير. ينتظر بدلًا من ذلك إذا كانت خوادم Fortnite متوقفة.",
+        "Claim Pirate Shop Access by itself (off: screenshot it and stop, you claim it)", "استلم Pirate Shop Access تلقائيًا (عند الإيقاف: يلتقط صورة ويتوقف لتستلمه بنفسك)",
+        "Pirate Shop Access left for you to claim", "Pirate Shop Access بانتظار أن تستلمه بنفسك",
+        "Pirate Shop Access!", "Pirate Shop Access!",
+        "Left unclaimed for you. Lobby Loop stopped.", "تُرك دون استلام لك. توقف Lobby Loop.",
+        "No match for {1} min: restarting Fortnite", "لا مباراة منذ {1} دقيقة: إعادة تشغيل Fortnite",
+        "Lobby is on {1}: switching back to Battle Royale", "الردهة على {1}: العودة إلى Battle Royale",
+        "Fortnite switched to {1} and Lobby Loop couldn't switch back. Pick Battle Royale.", "انتقل Fortnite إلى {1} ولم يتمكن Lobby Loop من العودة. اختر Battle Royale.",
         "Discord & phone", "Discord والهاتف",
         "Update available", "يتوفر تحديث",
         "Version {1} is ready. Tray menu > Check for updates, or !update from your phone.", "الإصدار {1} جاهز. قائمة الدرج > التحقق من التحديثات، أو ‎!update من هاتفك.",
@@ -4746,7 +4771,7 @@ DoSwap() {
 ; ============================================================
 MainLoop() {
     global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil, dimPending
-    global unfocusedSince, unfocusAlert
+    global unfocusedSince, unfocusAlert, lastMatchEndTick
     global lobbyVisit, modeChecked, modeRecheckTick, backToLobbyUntil, prizeWaitUntil
     if !running
         return
@@ -4771,6 +4796,7 @@ MainLoop() {
     }
     ; Remote play: you're using the mouse, so Lobby Loop waits
     if (A_TickCount < handsOffUntil) {
+        lastMatchEndTick := Max(lastMatchEndTick, A_TickCount - 60000)     ; you're using the PC: don't count this time
         SetStatus("📱 " Tx("You're in control ({1}s)", Ceil((handsOffUntil - A_TickCount) / 1000)))
         lastProgress := A_TickCount
         return
@@ -4830,6 +4856,12 @@ MainLoop() {
     if dimPending {
         dimPending := false
         ToggleBlackout(true)
+    }
+
+    ; v8.1: no match for N minutes: restart Fortnite
+    if (S["NO_MATCH_RESTART_MIN"] > 0 && lastMatchEndTick && A_TickCount - lastMatchEndTick > S["NO_MATCH_RESTART_MIN"] * 60000) {
+        NoMatchRestart()
+        return
     }
 
     ; Stuck watchdog
@@ -4979,7 +5011,8 @@ MainLoop() {
 
 ; Counts a finished match, reads the result, tells Discord
 OnMatchEnd(gotCrops, shot) {
-    global matches, totalMatches, lastProgress, unstickTries
+    global matches, totalMatches, lastProgress, unstickTries, lastMatchEndTick
+    lastMatchEndTick := A_TickCount
     matches += 1
     totalMatches += 1
     lastProgress := A_TickCount
@@ -5341,18 +5374,36 @@ ShowScreenText(waitMs := 0) {
 ; Reads the mode button above Ready in the lobby, e.g. "Build, Squad, Fill"
 ReadLobbyMode() {
     lines := OcrRegionSync(MON_X, MON_Y + Round(MON_H * 0.52), Round(MON_W * 0.32), Round(MON_H * 0.36))
-    all := "", anchor := ""
+    all := "", anchor := "", otherLine := "", other := ""
     for ln in lines {
         u := StrUpper(ln.text)
         all .= " " u
         if (!IsObject(anchor) && RegExMatch(u, "\b(SOLOS?|DUOS?|TRIOS?|SQUADS?|ZERO BUILD|BATTLE ROYALE)\b"))
             anchor := ln
+        if (other = "" && (o := OtherModeName(u)) != "")
+            other := o, otherLine := ln
     }
+    if (!IsObject(anchor) && IsObject(otherLine))
+        anchor := otherLine                              ; v8.1: another mode (Reload, LEGO...) is selected
     if !IsObject(anchor)
         return 0
     m := ParseMode(all)
-    m.x := anchor.x, m.y := anchor.y, m.w := anchor.w, m.h := anchor.h, m.text := ModeText(m.team != "" ? m.team : "?", m.build != "" ? m.build : "?", m.fill != "" ? m.fill : "?")
+    m.other := other
+    m.x := anchor.x, m.y := anchor.y, m.w := anchor.w, m.h := anchor.h
+    m.text := other != "" ? other : ModeText(m.team != "" ? m.team : "?", m.build != "" ? m.build : "?", m.fill != "" ? m.fill : "?")
     return m
+}
+
+; v8.1: modes that aren't Battle Royale. Returns the name found, or "".
+OtherModeName(u) {
+    static names := [["RELOAD", "Reload"], ["LEGO", "LEGO Fortnite"], ["FESTIVAL", "Fortnite Festival"], ["BALLISTIC", "Ballistic"],
+                     ["BLITZ", "Blitz Royale"], ["ROCKET RACING", "Rocket Racing"], ["RANKED", "Ranked"], ["SAVE THE WORLD", "Save the World"],
+                     ["CREATIVE", "Creative"], ["ZONE WARS", "Zone Wars"], ["BOX FIGHT", "Box Fights"], ["GUN GAME", "Gun Game"],
+                     ["TYCOON", "a Creative map"], ["DEATHRUN", "a Creative map"], ["FORTNITE OG", "Fortnite OG"]]
+    for n in names
+        if RegExMatch(u, "\b" n[1] "\b")
+            return n[2]
+    return ""
 }
 
 ParseMode(u) {
@@ -5369,6 +5420,8 @@ ModeWanted() {
 ModeOk(m) {
     if !IsObject(m)
         return false
+    if (S["BR_GUARD"] && m.HasProp("other") && m.other != "")
+        return false                                     ; not Battle Royale at all
     for pair in [["MODE_TEAM", "team"], ["MODE_BUILD", "build"], ["MODE_FILL", "fill"]] {
         want := StrLower(S[pair[1]])
         if (want != "any" && m.%pair[2]% != "" && m.%pair[2]% != want)
@@ -5426,10 +5479,72 @@ TrySwitchMode(m) {
     return ok
 }
 
+; v8.1: Fortnite jumped to another mode (Reload, LEGO, Festival...): open the mode picker,
+; click Battle Royale (or Zero Build if that's your mode), confirm, and check the lobby again.
+BackToBattleRoyale(m) {
+    static lastTry := 0
+    if (A_TickCount - lastTry < 45000)                  ; don't hammer the menus
+        return false
+    lastTry := A_TickCount
+    zb := StrLower(S["MODE_BUILD"]) = "zerobuild"
+    clickLine(ln, why) {
+        OwnMouse(), MouseMove(ln.x + ln.w // 2, ln.y + ln.h // 2, 5)
+        Sleep(180)
+        Click()
+        Log("Back to Battle Royale: clicked '" ln.text "' (" why ")")
+    }
+    findLine(test) {
+        for ln in OcrRegionSync(MON_X, MON_Y, MON_W, MON_H)
+            if test(Trim(StrUpper(ln.text), " .!•:"))
+                return ln
+        return ""
+    }
+    loop 2 {
+        ReleaseAll()
+        ; 1) open the mode picker (the mode button above Ready)
+        OwnMouse(), MouseMove(m.x + m.w // 2, m.y + m.h // 2, 5)
+        Sleep(200)
+        Click()
+        Sleep(2800)
+        ; 2) the Battle Royale tile (Zero Build if that's your mode)
+        tile := findLine(zb ? (u) => InStr(u, "ZERO BUILD") && !OtherModeName(u)
+                            : (u) => (u = "BATTLE ROYALE" || (InStr(u, "BATTLE ROYALE") && !InStr(u, "ZERO") && !OtherModeName(u))))
+        if !IsObject(tile) {
+            Log("Back to Battle Royale: couldn't find the " (zb ? "Zero Build" : "Battle Royale") " tile")
+            Send("{Esc}")
+            Sleep(1500)
+            continue
+        }
+        clickLine(tile, "tile")
+        Sleep(2500)
+        ; 3) confirm on the island page if there is one
+        btn := findLine((u) => RegExMatch(u, "^(SELECT|PLAY|CONFIRM|ACCEPT|SELECT MODE|PLAY NOW)$"))
+        if IsObject(btn) {
+            clickLine(btn, "confirm")
+            Sleep(3000)
+        }
+        ; 4) back in the lobby? check
+        after := ReadLobbyMode()
+        if !IsObject(after) {                           ; still in a menu: back out
+            Send("{Esc}")
+            Sleep(1800)
+            after := ReadLobbyMode()
+        }
+        if (IsObject(after) && after.other = "") {
+            Log("Back to Battle Royale: worked, lobby is on " after.text)
+            return true
+        }
+        if IsObject(after)
+            m := after
+    }
+    Log("Back to Battle Royale: didn't work")
+    return false
+}
+
 ; Called once per lobby visit before clicking Ready. Returns true if it's OK to ready up.
 ModeCheckBeforeReady() {
     global modeWarned
-    if !ModeWanted()
+    if (!ModeWanted() && !S["BR_GUARD"])
         return true
     m := ReadLobbyMode()
     if !IsObject(m) {
@@ -5441,6 +5556,22 @@ ModeCheckBeforeReady() {
         return true
     }
     wanted := ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"])
+    if (S["BR_GUARD"] && m.other != "") {               ; v8.1: Fortnite moved to another mode
+        Log("Wrong game mode: " m.other ", switching back to Battle Royale")
+        SetStatus("🔁 " Tx("Lobby is on {1}: switching back to Battle Royale", m.other))
+        if BackToBattleRoyale(m) {
+            Discord("🔁 **" PlayerName() "**: Fortnite had switched to **" m.other "**, Lobby Loop switched it back to Battle Royale.")
+            modeWarned := false
+            return ModeCheckBeforeReady()                ; now check team / build / fill as usual
+        }
+        if !modeWarned {
+            modeWarned := true
+            Notify(Tx("Wrong mode"), Tx("Fortnite switched to {1} and Lobby Loop couldn't switch back. Pick Battle Royale.", m.other))
+            if !SendScreenshot("⚠️ Fortnite switched to **" m.other "** and I couldn't switch back to Battle Royale. Waiting (I'll keep trying). This is the screen:")
+                Discord("⚠️ **" PlayerName() "**: Fortnite switched to **" m.other "** and I couldn't switch back to Battle Royale. Waiting.")
+        }
+        return false                                    ; never ready up in the wrong game
+    }
     Log("Wrong mode: '" m.text "', want " wanted)
     if (S["MODE_SWITCH"] && TrySwitchMode(m))
         return true
@@ -5606,7 +5737,8 @@ OpenSettings(startPage := 1) {
     d2 := add(UiDDL(g, "xs+" COL2 " y+4 w260", [Tx("Wait and tell me"), Tx("Ready up anyway")]))
     d2.Choose(StrLower(S["MODE_ACTION"]) = "ready" ? 2 : 1)
     c["MODE_ACTION"] := d2
-    tick("MODE_SWITCH", "Try to switch the mode for me (experimental)", "y+18")
+    tick("BR_GUARD", "If Fortnite switches to another mode (Reload, LEGO, Festival...), switch back to Battle Royale", "y+18")
+    tick("MODE_SWITCH", "Try to switch the mode for me (experimental)", "y+8")
     hint(Tx("The switch clicks the mode button and then the words for your mode. If it doesn't work, use Report a bug with a screenshot of the mode screen."))
     mb := add(UiButton(g, "x" CX " y+14 w260", "🔎 " Tx("Check the lobby mode now")))
     mb.OnEvent("Click", (*) => (g.Destroy(), ShowModeCheck(3000)))
@@ -5644,6 +5776,9 @@ OpenSettings(startPage := 1) {
     say(Tx("Fresh restart: restart Fortnite every this many hours, between matches (0 = off):"), "y+14")
     edit("FRESH_RESTART_HOURS", "y+4 w120")
     hint(Tx("Keeps Fortnite running smoothly overnight. It never restarts during a match."))
+    say(Tx("Restart Fortnite if no match started for this many minutes (0 = off):"), "y+14")
+    edit("NO_MATCH_RESTART_MIN", "y+4 w120")
+    hint(Tx("For when Fortnite gets stuck in menus or queues. It waits instead if Fortnite's servers are down."))
 
     ; ---- 5. Extras ----
     newPage(Tx("Extras"), Tx("Comfort and stats while it runs."))
@@ -5688,6 +5823,7 @@ OpenSettings(startPage := 1) {
     c["TREASURE_STOP"] := st
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Then it does your stop action (Settings > Play)."), "muted"))
     c["TREASURE_PROOF"] := addAll(UiCheck(g, "xs+" COL2 " y+12", Tx("Lobby proof: screenshot the prize screen, then click Claim"), S["TREASURE_PROOF"], 276))
+    c["CLAIM_TOKEN"] := addAll(UiCheck(g, "xs+" COL2 " y+6", Tx("Claim Pirate Shop Access by itself (off: screenshot it and stop, you claim it)"), S["CLAIM_TOKEN"], 276))
     uw := add(UiButton(g, "xs+" COL2 " y+10 w300", "🌐 " Tx("Update the words now")))
     uw.OnEvent("Click", (*) => SettingsUpdateWords(g))
     add(UiText(g, "xs+" COL2 " y+4 w300", Tx("Online words: {1}", S["TREASURE_ONLINE_VERSION"] != "" ? S["TREASURE_ONLINE_VERSION"] : Tx("not downloaded yet")), "muted"))
@@ -5991,6 +6127,7 @@ SaveSettingsGui(g, c) {
         nums := Map("MATCH_LIMIT", num("MATCH_LIMIT", Tx("Stop after this many matches (0 = no limit):"), 0, 10000),
                     "BATTERY_MIN", num("BATTERY_MIN", Tx("Battery % that counts as low:"), 5, 95),
                     "FRESH_RESTART_HOURS", num("FRESH_RESTART_HOURS", Tx("Fresh restart: restart Fortnite every this many hours, between matches (0 = off):"), 0, 48),
+                    "NO_MATCH_RESTART_MIN", num("NO_MATCH_RESTART_MIN", Tx("Restart Fortnite if no match started for this many minutes (0 = off):"), 0, 1440),
                     "CLEAN_DAYS", num("CLEAN_DAYS", Tx("Delete match lists older than this many days (0 = keep, treasure finds are always kept):"), 0, 3650),
                     "CLEAN_PROOF_DAYS", num("CLEAN_PROOF_DAYS", Tx("Delete proof screenshots older than this many days (0 = keep forever):"), 0, 3650),
                     "LOG_MAX_MB", num("LOG_MAX_MB", Tx("Keep the log under (MB):"), 1, 500),
@@ -6042,7 +6179,7 @@ SaveSettingsGui(g, c) {
     for key in ["AUTO_START", "LAUNCH_FORTNITE", "MUTE_WHILE_RUNNING", "BLACKOUT_ON_START", "READ_RESULTS",
                 "SCREENSHOT_EVERY_MATCH", "NOTIFY", "SPECTATE_IDLE", "WAIT_FOR_SQUAD", "WAKE_FROM_SLEEP", "AUTO_CLAIM", "TREASURE_ONLINE", "TREASURE_PROOF",
                 "KNOWN_POPUPS", "CHECK_SERVERS", "FPS_SAVER", "BATTERY_GUARD", "BATTERY_SLEEP", "WEEKLY_RECAP", "EMPTY_SQUAD", "WATCH_TREASURE", "LIVE_STATUS", "MODE_SWITCH",
-                "KEEP_AWAKE", "STREAM_HIDE", "REMOTE_MODE", "REMOTE_REFOCUS",
+                "KEEP_AWAKE", "STREAM_HIDE", "REMOTE_MODE", "REMOTE_REFOCUS", "BR_GUARD", "CLAIM_TOKEN",
                 "TREASURE_GIZMO", "TREASURE_COSMETIC", "TREASURE_TOKEN", "TREASURE_NOTIFY", "TREASURE_BEEP", "TREASURE_DISCORD",
                 "TREASURE_SCREENSHOT", "TREASURE_CLIP", "CLIP_UPLOAD"]
         if c.Has(key)
@@ -6808,7 +6945,8 @@ SquadRows(lines) {
 }
 
 OnMatchStart() {
-    global squadMatchTick, squadBaseline, squadLowSince, squadLeft
+    global squadMatchTick, squadBaseline, squadLowSince, squadLeft, lastMatchEndTick
+    lastMatchEndTick := A_TickCount                    ; a match started: the no-match restart timer starts over
     squadMatchTick := A_TickCount, squadBaseline := 0, squadLowSince := 0, squadLeft := false
 }
 
@@ -7356,6 +7494,24 @@ ClaimPrizeScreen(lines, joined) {
     }
     if !WinActive(S["GAME_WINDOW"])
         return true
+    ; v8.1: Pirate Shop Access can be left unclaimed for you
+    if !S["CLAIM_TOKEN"] {
+        isToken := false
+        for w in WordList(MergeWords("PIRATE SHOP ACCESS,SHOP ACCESS", S["TREASURE_TOKEN_WORDS"]))
+            if (StrLen(w) >= 5 && InStr(StrUpper(joined), StrUpper(w)))
+                isToken := true
+        if isToken {
+            lastClaimTick := A_TickCount
+            Log("Pirate Shop Access on screen: not claimed (Claim Pirate Shop Access is off), stopping")
+            SetStatus("🏴‍☠️ " Tx("Pirate Shop Access left for you to claim"))
+            Discord("🏴‍☠️ **" PlayerName() "**: **Pirate Shop Access** is on screen. Not claimed (your setting), Lobby Loop stopped so you can claim it yourself.")
+            NtfyPush("Pirate Shop Access!", "Left unclaimed for you. Lobby Loop stopped.", 5, "pirate_flag")
+            Notify(Tx("Pirate Shop Access!"), Tx("Left unclaimed for you. Lobby Loop stopped."))
+            if running
+                ToggleRun("Pirate Shop Access left unclaimed")
+            return true
+        }
+    }
     ; click CLAIM (where OCR found it, or the usual spot at the bottom middle)
     x := IsObject(btn) ? btn.x + btn.w // 2 : MON_X + MON_W // 2
     y := IsObject(btn) ? btn.y + btn.h // 2 : MON_Y + Round(MON_H * 0.884)
@@ -7511,6 +7667,27 @@ FreshRestartDue() {
     return running && h > 0 && fnStartTick && A_TickCount - fnStartTick > h * 3600000
 }
 
+; v8.1: no match started for NO_MATCH_RESTART_MIN minutes: close and reopen Fortnite
+NoMatchRestart() {
+    global lastMatchEndTick, goneSince, fnStartTick, lobbyVisit
+    mins := S["NO_MATCH_RESTART_MIN"]
+    lastMatchEndTick := A_TickCount
+    if ((why := ServersDown()) != "") {                 ; Epic's servers are down: restarting won't help
+        ServersDownNotice(why)
+        return
+    }
+    Log("No match for " mins " min: restarting Fortnite")
+    SetStatus("🔄 " Tx("No match for {1} min: restarting Fortnite", mins))
+    if !SendScreenshot("🔄 No match in " mins " min, restarting Fortnite. This was the screen:")
+        Discord("🔄 **" PlayerName() "**: no match in " mins " min, restarting Fortnite.")
+    ReleaseAll()
+    try ProcessClose(GameExe())
+    fnStartTick := 0, lobbyVisit := false
+    goneSince := A_TickCount - 31000                    ; the normal reopen kicks in straight away
+    if !S["LAUNCH_FORTNITE"]
+        SetTimer(() => Run(FN_URI), -8000)
+}
+
 FreshRestart() {
     global fnStartTick, lobbyVisit, goneSince
     h := S["FRESH_RESTART_HOURS"]
@@ -7537,7 +7714,8 @@ PhoneSet(arg, authorId, who) {
         . "``!set mode zerobuild squad fill``   ``!set stop 8am`` / ``2h`` / ``off``   ``!set profile overnight```n"
         . "``!set after lobby`` / ``playagain``   ``!set limit 20``   ``!set restart 6`` (hours, 0 = off)`n"
         . "``!set volume 30``   ``!set mute on``   ``!set dim on``   ``!set fps on``   ``!set screen 2`` (0 = auto)`n"
-        . "``!set treasure on``   ``!set stopfind token`` / ``any`` / ``off``   ``!set clip on``   ``!set fill on``   ``!set squadcheck on``   ``!set recap on``   ``!set remote on``"
+        . "``!set nomatch 45`` (restart after N min without a match, 0 = off)   ``!set claimtoken off``   ``!set brguard on```n"
+    . "``!set treasure on``   ``!set stopfind token`` / ``any`` / ``off``   ``!set clip on``   ``!set fill on``   ``!set squadcheck on``   ``!set recap on``   ``!set remote on``"
     p := StrSplit(Trim(arg), " ", , 2)
     key := StrLower(p[1]), val := p.Length >= 2 ? Trim(p[2]) : ""
     if (key = "" || val = "") {
@@ -7546,7 +7724,7 @@ PhoneSet(arg, authorId, who) {
     }
     onoff(v) => (v ~= "i)^(on|yes|1|true)$") ? 1 : (v ~= "i)^(off|no|0|false)$") ? 0 : ""
     toggles := Map("mute", "MUTE_WHILE_RUNNING", "dim", "BLACKOUT_ON_START", "fps", "FPS_SAVER", "treasure", "WATCH_TREASURE",
-                   "clip", "TREASURE_CLIP", "squadcheck", "EMPTY_SQUAD", "recap", "WEEKLY_RECAP", "remote", "REMOTE_MODE")
+                   "clip", "TREASURE_CLIP", "squadcheck", "EMPTY_SQUAD", "recap", "WEEKLY_RECAP", "remote", "REMOTE_MODE", "claimtoken", "CLAIM_TOKEN", "brguard", "BR_GUARD")
     switch key {
         case "stop", "timer":
             HandleCommand("!timer " val, authorId)
