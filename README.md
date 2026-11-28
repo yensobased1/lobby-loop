@@ -81,7 +81,7 @@ Keep Fortnite as the active window: it pauses when you tab out.
 3. **Or run the script instead of the .exe:** `lobby_loop.ahk` with `start_lobby_loop.bat` (installs AutoHotkey if needed). Scripts are flagged far less often.
 4. **Help get it whitelisted:** report it to Microsoft at [microsoft.com/wdsi/filesubmission](https://www.microsoft.com/en-us/wdsi/filesubmission) as *Incorrectly detected*.
 
-**Known VirusTotal flags (v8.1.1: 3 of 68 engines, Microsoft clean):** all three are *heuristic* guesses, not a known virus.
+**Known VirusTotal flags:** v8.1.1 had 3 of 68 engines; **v8.1.2 has 1 of 68** (Malwarebytes only; Microsoft, Bkav and Gridinsoft clean). These are *heuristic* guesses, not a known virus.
 
 | Engine | Name it shows | Where to report |
 |---|---|---|
