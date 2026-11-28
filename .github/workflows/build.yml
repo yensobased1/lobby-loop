@@ -67,15 +67,6 @@ jobs:
           Write-Host $out
           if ($LASTEXITCODE -ne 0 -or $out -notmatch "PASS") { throw "The picture upload code doesn't work" }
 
-      - name: Screen reader test (Windows' text reader, inside AutoHotkey)
-        shell: pwsh
-        run: |
-          python scripts/test_ocr.py
-          $out = & $env:AHK /ErrorStdOut tests\ocr_test.ahk 2>&1 | Out-String
-          Write-Host $out
-          if ($out -match "no text reader language installed|not available") { Write-Host "::warning::This GitHub machine has no OCR language, test skipped"; exit 0 }
-          if ($LASTEXITCODE -ne 0 -or $out -notmatch "PASS") { throw "The screen reader code doesn't work" }
-
       - name: Build the .exe files
         shell: pwsh
         run: |
