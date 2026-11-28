@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 8.1.2
+;@Ahk2Exe-SetVersion 8.1.3
 ;@Ahk2Exe-SetCompanyName yensobased1
 ;@Ahk2Exe-SetCopyright Open source - github.com/yensobased1/lobby-loop
 ;@Ahk2Exe-SetLegalTrademarks Unofficial fan tool - not affiliated with Epic Games
@@ -17,7 +17,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "8.1.2"
+VERSION := "8.1.3"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -25,6 +25,11 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.1.3  (28 Nov 2026)",
+    "  * Treasure: the match-recap card's gold background no longer counts as Pirate",
+    "    Shop Access, and Discord gets the full screenshot instead of a close-up of",
+    "    plain gold",
+    "",
     "v8.1.2  (28 Nov 2026) - fewer antivirus false alarms",
     "  * The .exe now carries full file details (product, publisher, copyright)",
     "  * The .exe no longer asks for Administrator in its manifest. It still asks",
@@ -5238,7 +5243,7 @@ TreasureFound(text, cat := "", img := "") {
         sent := false
         if (img != "" && FileExist(img))                ; close-up of the prize icon
             sent := DiscordFile(msg, img)
-        if (S["TREASURE_SCREENSHOT"] && !sent) {
+        if ((S["TREASURE_SCREENSHOT"] || InStr(text, "match recap") || InStr(text, "gold icon")) && !sent) {
             try FileCopy(A_Temp "\ll_screen.png", shot, 1)
             sent := FileExist(shot) && DiscordFile(msg, shot)
         }
@@ -8226,7 +8231,7 @@ RecapIcon(label) {
         out.path := path
     cap := Capture(x, y, w, h)
     cell := 10, cols := w // cell, rows := h // cell
-    grid := []
+    grid := [], lumN := 0, lumSum := 0, lumSq := 0, allGold := 0, allCells := 0
     loop rows {
         r := A_Index - 1
         row := []
@@ -8240,11 +8245,14 @@ RecapIcon(label) {
                         continue
                     n += 1
                     rr := (c >> 16) & 0xFF, gg := (c >> 8) & 0xFF, bb := c & 0xFF
+                    lum := (rr * 3 + gg * 6 + bb) / 10
+                    lumN += 1, lumSum += lum, lumSq += lum * lum
                     if (rr > 170 && gg > 110 && bb < 110 && rr >= gg && rr - bb > 90)
                         g += 1
                 }
             }
             row.Push(n ? g / n : 0)
+            allGold += n ? g / n : 0, allCells += 1
         }
         grid.Push(row)
     }
@@ -8265,7 +8273,16 @@ RecapIcon(label) {
         }
     }
     out.ratio := Round(best, 2)
-    out.gold := best >= 0.25
-    Log("Recap icon gold: " Round(best * 100) "%")
+    bg := allCells ? allGold / allCells : 0             ; gold across the whole close-up
+    sd := lumN ? Sqrt(Max(0, lumSq / lumN - (lumSum / lumN) ** 2)) : 0
+    ; A Pirate Shop Access icon is a gold spot that stands out. If the whole close-up is
+    ; gold (the recap card's background) or flat, it's not the icon: don't call it a token
+    ; and send the full screenshot instead of a close-up of empty background.
+    plainBg := (bg >= 0.45 || sd < 18)
+    out.gold := best >= 0.25 && !plainBg && best - bg >= 0.2
+    if plainBg
+        out.path := ""
+    Log("Recap icon gold: " Round(best * 100) "% (background " Round(bg * 100) "%, detail " Round(sd) ")"
+        . (plainBg ? ", only background in the close-up" : ""))
     return out
 }
