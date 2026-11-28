@@ -1,8 +1,29 @@
-<p align="center"><img src="lobby_loop_icon.png" width="140" alt="Lobby Loop icon"></p>
+<p align="center"><img src="assets/banner_hero.png" width="100%" alt="Lobby Loop: your squad farms the chests, you bot"></p>
+
+<p align="center">
+  <a href="https://github.com/yensobased1/lobby-loop/releases/latest"><b>⬇️ Download the latest release</b></a>
+</p>
 
 # 🔁 Lobby Loop
 
 **Set-and-forget AFK (Away From Keyboard) helper for Fortnite squad fills.** Your teammates farm chests for you while you bot: Lobby Loop readies up in the mode you pick, clicks Play Again, moves like a person, spots treasure and stops on a timer.
+
+<p align="center"><img src="assets/banner_flow.png" width="100%" alt="How a night with Lobby Loop goes: lobby, ready up, match, treasure, play again"></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/feature_queue.png" alt="Auto queue"></td>
+    <td width="50%"><img src="assets/feature_treasure.png" alt="Treasure watcher"></td>
+  </tr>
+  <tr>
+    <td><img src="assets/feature_phone.png" alt="Phone control"></td>
+    <td><img src="assets/feature_remote.png" alt="Remote play with Parsec and AnyDesk"></td>
+  </tr>
+  <tr>
+    <td><img src="assets/feature_safety.png" alt="Overnight safety"></td>
+    <td><img src="assets/feature_stats.png" alt="Stats and leaderboard"></td>
+  </tr>
+</table>
 
 ## ✨ Features
 - 🔁 **Auto queue:** clicks Ready / Play and Play Again by itself (16:9, 16:10 and 21:9 screens)
@@ -21,7 +42,8 @@
 - 🛟 **Self-recovery:** clicks popups you teach it (F7), reopens Fortnite after a crash, gets itself unstuck
 - 📊 **Stats:** reads your placement and XP, history in Excel, and a stats dashboard with charts
 - 🔔 **Discord:** alerts, screenshots, daily summary, friends leaderboard
-- 📱 **Phone control** with a Discord bot: `!start` `!stop` `!status` `!ss` `!log` `!lb` `!summary` `!dim`
+- 📱 **Phone control** with a Discord bot: `!start` `!stop` `!status` `!ss` `!log` `!lb` `!summary` `!dim` `!focus` `!set` and more (`!help`)
+- 🖥️ **Remote play:** steps aside when you take over with Parsec or AnyDesk from your phone, and warns you if the PC gets locked
 - ⬆️ **Auto-updates** from this repo, and **Start with Windows**
 
 ## 🚀 How to use
