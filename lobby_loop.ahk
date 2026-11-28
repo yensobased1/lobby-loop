@@ -32,6 +32,14 @@ CHANGELOG := [
     "    screen while it starts",
     "  * Match recap: gold Pirate Shop Access icon detected, Discord gets a close-up",
     "  * New drawn icons in Settings; Lobby Loop's own windows never trigger the watcher",
+    "  * Never stuck on 'Paused' for hours again: after 10 min with Fortnite not in",
+    "    front you get a Discord / phone alert, after 20 min with nobody at the PC",
+    "    Fortnite is brought back by itself",
+    "  * The automatic update check no longer pops an 'Update now?' box that took",
+    "    focus from Fortnite (you get a notification + Discord message instead)",
+    "  * !update, !reload, Settings > Save and tray > Reload carry on running after",
+    "  * A failed !update tells you on Discord instead of a box on the PC",
+    "  * What's new opens behind Fortnite instead of taking focus",
     "  + Remote play (Settings > Phone control) for Parsec / AnyDesk from your phone:",
     "    steps aside when you move the mouse and lets go of all keys, hands back after",
     "    60 s, shows the status box to them, brings Fortnite back to the front",
@@ -526,6 +534,7 @@ totalIdleKicks := Integer(IniRead(STATS_FILE, "Stats", "IdleKicks", 0))
 handsOffUntil := 0     ; remote play: you moved the mouse, Lobby Loop waits until this time
 ownMouseTick := 0      ; last time Lobby Loop itself moved the mouse
 pcLocked := false      ; Windows is locked (AnyDesk/Parsec can lock it when you leave)
+unfocusAlert := -1     ; which unfocused stretch was already reported
 unfocusedSince := 0    ; remote play: when Fortnite lost focus
 wordsShown := Map()    ; word lists as the Settings window showed them
 dimPending := false    ; dim the screen once Fortnite is open
@@ -648,7 +657,7 @@ A_TrayMenu.Add(Tx("Stats dashboard"), (*) => OpenDashboard())
 A_TrayMenu.Add(Tx("Tools"), toolsMenu)
 A_TrayMenu.Add(Tx("Check for updates"), (*) => CheckUpdate(false))
 A_TrayMenu.Add(Tx("What's new") " (v" VERSION ")", (*) => ShowWhatsNew())
-A_TrayMenu.Add(Tx("Reload"), (*) => Reload())
+A_TrayMenu.Add(Tx("Reload"), (*) => RestartKeepRunning())
 A_TrayMenu.Add()
 A_TrayMenu.Add(Tx("Exit") "  (" HK_EXIT ")", (*) => ExitScript())
 A_TrayMenu.Default := trayStart
@@ -704,6 +713,10 @@ if !S["SETUP_DONE"] {
 }
 if (S["AUTO_UPDATE"] && UpdateUrl() != "")
     SetTimer(() => CheckUpdate(true), -3000)
+if (IniRead(STATS_FILE, "Stats", "ResumeAfterRestart", "") = "1") {
+    IniDelete(STATS_FILE, "Stats", "ResumeAfterRestart")
+    SetTimer(ResumeAfterRestart, -6000)
+}
 
 ; ============================================================
 ; Control
@@ -958,8 +971,12 @@ ShowWhatsNew() {
     okBtn.OnEvent("Click", (*) => g.Destroy())
     g.OnEvent("Escape", (*) => g.Destroy())
     g.OnEvent("Close", (*) => g.Destroy())
-    g.Show()
-    okBtn.Focus()
+    if WinExist(S["GAME_WINDOW"])
+        g.Show("NoActivate")                          ; don't pull focus away from Fortnite
+    else {
+        g.Show()
+        okBtn.Focus()
+    }
 }
 
 ; ============================================================
@@ -1120,7 +1137,7 @@ SettingsImportCode(g, code) {
     }
     MsgBox(Tx("Loaded {1} settings. Lobby Loop restarts now.", n), TITLE, "Iconi Owner" g.Hwnd)
     g.Destroy()
-    Reload()
+    RestartKeepRunning()
 }
 
 ProfileIndex(key) {
@@ -1768,21 +1785,28 @@ CheckUpdate(silent := true, autoYes := false) {
             Discord("**" PlayerName() "**: already on the latest version (v" VERSION ").")
         return
     }
+    if (silent && !autoYes) {                     ; automatic check: never pop a box that takes focus from Fortnite
+        Log("Update v" latest " is available")
+        Notify(Tx("Update available"), Tx("Version {1} is ready. Tray menu > Check for updates, or !update from your phone.", latest))
+        Discord("⬆️ **" PlayerName() "**: version " latest " is available (you have " VERSION "). Send ``!update`` to install it, it keeps running after.")
+        return
+    }
     if (autoYes || MsgBox("Version " latest " is available (you have " VERSION ").`n`nUpdate now?", TITLE, "YesNo Iconi") = "Yes") {
-        DoUpdate(url, latest)
+        DoUpdate(url, latest, autoYes)
         return
     }
     return
 }
 
-DoUpdate(url, latest) {
+DoUpdate(url, latest, fromPhone := false) {
+    fail(msg) => fromPhone ? Discord("**" PlayerName() "**: update failed: " msg) : MsgBox(msg, TITLE, "Icon!")
     folder := SubStr(url, 1, InStr(url, "/", , -1))      ; same folder as version.txt
     fileUrl := folder A_ScriptName
     tmp := A_Temp "\fnafk_update_" A_ScriptName
     try {
         Download(fileUrl "?t=" A_TickCount, tmp)
     } catch {
-        MsgBox("Couldn't download " A_ScriptName ".`nIs it uploaded next to version.txt?", TITLE, "Icon!")
+        fail("Couldn't download " A_ScriptName ".`nIs it uploaded next to version.txt?")
         return
     }
     ; sanity checks so a broken download never replaces a working copy
@@ -1799,11 +1823,13 @@ DoUpdate(url, latest) {
     }
     if !good {
         Log("Update download looked wrong, not installed")
-        MsgBox("The downloaded file doesn't look right, so it wasn't installed.", TITLE, "Icon!")
+        fail("The downloaded file doesn't look right, so it wasn't installed.")
         return
     }
-    if running
+    if running {
+        IniWrite(1, STATS_FILE, "Stats", "ResumeAfterRestart")   ; the new version carries on by itself
         ToggleRun("update")
+    }
     Log("Updating to v" latest)
     Discord("Updated to v" latest)
     if A_IsCompiled {
@@ -1813,7 +1839,7 @@ DoUpdate(url, latest) {
         ExitApp()
     } else {
         FileCopy(tmp, A_ScriptFullPath, 1)
-        Reload()
+        Reload()                                               ; flag already set above
     }
 }
 
@@ -1838,6 +1864,9 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "Update available", "يتوفر تحديث",
+        "Version {1} is ready. Tray menu > Check for updates, or !update from your phone.", "الإصدار {1} جاهز. قائمة الدرج > التحقق من التحديثات، أو ‎!update من هاتفك.",
+        "Fortnite isn't the window in front, so nothing is happening.", "Fortnite ليس النافذة الأمامية، لذلك لا يحدث شيء.",
         "Bring Fortnite back to the front if it loses focus", "أعد Fortnite إلى الواجهة إذا فقد التركيز",
         "Step aside when I move the mouse (and show the status box to Parsec / AnyDesk)", "توقف عندما أحرك الماوس (وأظهر مربع الحالة في Parsec / AnyDesk)",
         "You're in control ({1}s)", "أنت المتحكم الآن ({1} ث)",
@@ -3148,8 +3177,8 @@ HandleCommand(text, authorId := "") {
                     Discord(who "checking for updates...")
                     CheckUpdate(true, true)
                 case "reload":
-                    Discord(who "restarting Lobby Loop 🔄")
-                    Reload()
+                    Discord(who "restarting Lobby Loop 🔄" (running ? " (it carries on after)" : ""))
+                    RestartKeepRunning()
                 case "restartgame":
                     try ProcessClose(GameExe())
                     Discord(who "restarting Fortnite 🔄")
@@ -4557,7 +4586,7 @@ DoSwap() {
 ; ============================================================
 MainLoop() {
     global gameState, matches, totalMatches, lastProgress, unstickTries, goneSince, launchTick, launchTries, activateUntil, dimPending
-    global unfocusedSince
+    global unfocusedSince, unfocusAlert
     global lobbyVisit, modeChecked, modeRecheckTick, backToLobbyUntil, prizeWaitUntil
     if !running
         return
@@ -4621,6 +4650,17 @@ MainLoop() {
             Log("Remote play: Fortnite lost focus for 90 s, bringing it back")
             try WinActivate(S["GAME_WINDOW"])
             unfocusedSince := A_TickCount
+        } else if (A_TickCount - unfocusedSince > 1200000 && A_TimeIdlePhysical > 600000 && WinExist(S["GAME_WINDOW"])) {
+            Log("Fortnite wasn't in front for 20 min and nobody is using the PC: bringing it back")
+            try WinActivate(S["GAME_WINDOW"])
+            unfocusedSince := A_TickCount
+        }
+        if (A_TickCount - unfocusedSince > 600000 && unfocusAlert != unfocusedSince) {
+            unfocusAlert := unfocusedSince
+            Log("Paused for 10 min: Fortnite isn't in front")
+            Discord("⏸️ **" PlayerName() "**: paused for 10 min because Fortnite isn't the window in front. Send ``!focus`` to fix it.")
+            NtfyPush("Lobby Loop paused", "Fortnite isn't in front. Send !focus.", 4, "pause_button")
+            Notify(Tx("Paused: click into Fortnite"), Tx("Fortnite isn't the window in front, so nothing is happening."))
         }
         lastProgress := A_TickCount              ; watchdog only counts time spent in Fortnite
         SetStatus(Tx("Paused: click into Fortnite"))
@@ -5907,7 +5947,7 @@ SaveSettingsGui(g, c) {
     PlaceOverlay()
     Log("Settings saved. Profile: " S["PROFILE"] ", mode: " ModeText(S["MODE_TEAM"], S["MODE_BUILD"], S["MODE_FILL"]) ", stop: " DescribeStop())
     if needReload {
-        Reload()
+        RestartKeepRunning()
         return
     }
     ShowTip(Tx("Saved.") "`n" Tx("Stop: {1}", DescribeStop()) ", " Tx("then {1}", StrLower(ActionLabel(S["STOP_ACTION"]))), 4000)
@@ -7248,6 +7288,26 @@ UpdateMonitor(force := false) {
     SCALE := Min(MON_W / 2560, MON_H / 1440)
     if !force
         Log("Fortnite is on screen " mon " (" MON_W "x" MON_H " at " MON_X "," MON_Y ")")
+}
+
+; ============================================================
+; v7.9.1: restarts (update, !reload, Settings) carry on running
+; ============================================================
+RestartKeepRunning() {
+    if running
+        IniWrite(1, STATS_FILE, "Stats", "ResumeAfterRestart")
+    Reload()
+}
+
+ResumeAfterRestart() {
+    if running
+        return
+    if WinExist(S["GAME_WINDOW"])
+        try WinActivate(S["GAME_WINDOW"])
+    Log("Carrying on after the restart")
+    ToggleRun()
+    if running
+        Discord("▶️ **" PlayerName() "**: back and running (v" VERSION ").")
 }
 
 ; ============================================================
