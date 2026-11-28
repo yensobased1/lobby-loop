@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 8.0.0
+;@Ahk2Exe-SetVersion 8.0.1
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "8.0"
+VERSION := "8.0.1"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,13 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.0.1  (28 Nov 2026) - Discord pictures (GitHub issue #1)",
+    "  * Screenshots, clips and logs are sent from inside Lobby Loop (like text), so an",
+    "    antivirus that blocks curl.exe can't stop them any more",
+    "  * If a picture still can't be sent, the log says why (Discord's answer, no",
+    "    internet, antivirus...)",
+    "  * Discord > Send test now also sends a picture, and tells you if it fails",
+    "",
     "v8.0  (28 Nov 2026) - the finished version",
     "  * Everything from 7.9.x in one stable release: remote play (Parsec / AnyDesk),",
     "    never stuck on 'Paused', restarts keep running, treasure recap icons,",
@@ -550,6 +557,7 @@ ownMouseTick := 0      ; last time Lobby Loop itself moved the mouse
 pcLocked := false      ; Windows is locked (AnyDesk/Parsec can lock it when you leave)
 unfocusAlert := -1     ; which unfocused stretch was already reported
 unfocusedSince := 0    ; remote play: when Fortnite lost focus
+lastUploadError := ""   ; why the last Discord picture upload failed (shown by the test button)
 wordsShown := Map()    ; word lists as the Settings window showed them
 dimPending := false    ; dim the screen once Fortnite is open
 fpsWaiting := false    ; FPS saver waits for Lobby Loop to open Fortnite
@@ -1661,36 +1669,123 @@ Discord(msg, url := "") {
     }
 }
 
-; Sends a message with a file (screenshot or log) using curl.exe, which comes with Windows 10/11
-DiscordFile(msg, filePath) {
-    curl := A_WinDir "\System32\curl.exe"
-    if !FileExist(curl) || !FileExist(filePath)
+; Sends a message with a file (screenshot, clip, log).
+; v8.0.1: uploads inside Lobby Loop with Windows' WinHTTP (like text messages), so antivirus
+; "process creation" rules can't block it. curl.exe is only a backup, and every failure is logged
+; with its reason (GitHub issue #1).
+DiscordFile(msg, filePath, url := "") {
+    global lastUploadError
+    lastUploadError := ""
+    if !FileExist(filePath) {
+        lastUploadError := "the file to send is missing: " filePath
+        Log("Discord file upload skipped: " lastUploadError)
         return false
-    hook := DiscordUrl()
+    }
+    hook := (url != "") ? url : DiscordUrl()
     if (hook != "") {
-        url := hook
+        url := hook (InStr(hook, "?") ? "&" : "?") "wait=true"   ; makes Discord reply, so we know it worked
         payload := '{"username":"' JsonEscape(BotName()) '","avatar_url":"' ICON_URL '","content":"' JsonEscape(SubStr(msg, 1, 1990)) '"}'
         auth := ""
     } else if BotEnabled() {
         url := "https://discord.com/api/v10/channels/" Trim(String(S["DISCORD_CHANNEL_ID"])) "/messages"
         payload := '{"content":"' JsonEscape(SubStr("**" BotName() "**: " msg, 1, 1990)) '"}'
-        auth := ' -H "Authorization: Bot ' Trim(String(S["DISCORD_BOT_TOKEN"])) '"'
+        auth := "Bot " Trim(String(S["DISCORD_BOT_TOKEN"]))
     } else {
+        lastUploadError := "no Discord webhook or bot is set up"
         return false
     }
-    if (hook != "")
-        url .= (InStr(url, "?") ? "&" : "?") "wait=true"   ; makes Discord reply, so we know it worked
+    sizeKB := Round(FileGetSize(filePath) / 1024)
+    ; 1) WinHTTP, inside Lobby Loop
+    r := HttpUploadFile(url, payload, filePath, auth)
+    if (r.err = "") {
+        ok := (r.status >= 200 && r.status < 300 && InStr(r.text, '"id"'))
+        if ok {
+            Log("Discord file upload OK (" sizeKB " KB)")
+            return true
+        }
+        lastUploadError := "Discord answered HTTP " r.status (r.status = 413 ? " (file too big for Discord: " sizeKB " KB)" : r.status = 401 || r.status = 403 || r.status = 404 ? " (check the webhook link / bot token)" : r.status = 429 ? " (too many messages, try again in a minute)" : "") ": " SubStr(r.text, 1, 160)
+        Log("Discord file upload failed: " lastUploadError)
+        return false                              ; Discord said no: curl would get the same answer
+    }
+    ; 2) WinHTTP itself failed (no answer at all): try curl.exe, and say exactly what happened
+    Log("Discord file upload: WinHTTP failed (" r.err "), trying curl.exe")
+    return CurlUploadFile(url, payload, filePath, auth, r.err)
+}
+
+; multipart/form-data upload with WinHTTP. Returns {status, text, err}
+HttpUploadFile(url, payload, filePath, auth := "") {
+    out := {status: 0, text: "", err: ""}
+    try {
+        boundary := "----LobbyLoop" A_TickCount Random(100000, 999999)
+        SplitPath(filePath, &fname)
+        head := "--" boundary "`r`nContent-Disposition: form-data; name=`"payload_json`"`r`nContent-Type: application/json`r`n`r`n" payload
+              . "`r`n--" boundary "`r`nContent-Disposition: form-data; name=`"files[0]`"; filename=`"" fname "`"`r`nContent-Type: application/octet-stream`r`n`r`n"
+        tail := "`r`n--" boundary "--`r`n"
+        f := FileOpen(filePath, "r")
+        fsize := f.Length
+        hlen := StrPut(head, "UTF-8") - 1, tlen := StrPut(tail, "UTF-8") - 1
+        total := hlen + fsize + tlen
+        buf := Buffer(total + 1, 0)
+        StrPut(head, buf.Ptr, "UTF-8")
+        f.RawRead(buf.Ptr + hlen, fsize)
+        f.Close()
+        StrPut(tail, buf.Ptr + hlen + fsize, "UTF-8")
+        arr := ComObjArray(0x11, total)                 ; VT_UI1 byte array for WinHttpRequest.Send
+        pData := 0
+        DllCall("oleaut32\SafeArrayAccessData", "Ptr", ComObjValue(arr), "Ptr*", &pData)
+        DllCall("RtlMoveMemory", "Ptr", pData, "Ptr", buf.Ptr, "UPtr", total)
+        DllCall("oleaut32\SafeArrayUnaccessData", "Ptr", ComObjValue(arr))
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        req.SetTimeouts(5000, 10000, 60000, 60000)
+        req.Open("POST", url, false)
+        req.SetRequestHeader("Content-Type", "multipart/form-data; boundary=" boundary)
+        if (auth != "")
+            req.SetRequestHeader("Authorization", auth)
+        req.Send(arr)
+        out.status := req.Status
+        out.text := req.ResponseText
+    } catch as e {
+        out.err := Trim(e.Message, " `r`n")
+    }
+    return out
+}
+
+; Backup upload with curl.exe (comes with Windows 10/11). Logs the reason for every failure.
+CurlUploadFile(url, payload, filePath, auth, whyFallback := "") {
+    global lastUploadError
+    curl := A_WinDir "\System32\curl.exe"
+    if !FileExist(curl) {
+        lastUploadError := "the upload failed (" whyFallback ") and curl.exe isn't on this PC"
+        Log("Discord file upload failed: " lastUploadError)
+        return false
+    }
     jsonPath := A_Temp "\ll_payload.json"
     outPath := A_Temp "\ll_curl.txt"
     try FileDelete(jsonPath)
     try FileDelete(outPath)
     FileAppend(payload, jsonPath, "UTF-8-RAW")
-    cmd := '"' curl '" -s -m 40 -o "' outPath '"' auth ' -F "payload_json=<' jsonPath '" -F "files[0]=@' filePath '" "' url '"'
-    try RunWait(cmd, , "Hide")
+    cmd := '"' curl '" -s -S -m 60 -w "\nHTTP %{http_code}" -o "' outPath '"' (auth != "" ? ' -H "Authorization: ' auth '"' : "")
+         . ' -F "payload_json=<' jsonPath '" -F "files[0]=@' filePath '" "' url '"'
+    exitCode := ""
+    try exitCode := RunWait(cmd, , "Hide")
+    catch as e {
+        lastUploadError := "Windows couldn't start curl.exe (" Trim(e.Message, " `r`n") "). An antivirus 'process creation' rule may be blocking it: allow " A_ScriptName " and curl.exe"
+        Log("Discord file upload failed: " lastUploadError)
+        try FileDelete(jsonPath)
+        return false
+    }
+    try FileDelete(jsonPath)
+    if !FileExist(outPath) {
+        lastUploadError := "curl.exe ran but got no answer (exit code " exitCode (exitCode = 6 ? ": no internet / DNS" : exitCode = 7 ? ": can't connect" : exitCode = 28 ? ": timed out" : exitCode = 35 || exitCode = 60 ? ": secure connection blocked, maybe antivirus web filtering" : "") ")"
+        Log("Discord file upload failed: " lastUploadError)
+        return false
+    }
     reply := ""
     try reply := FileRead(outPath, "UTF-8")
     ok := InStr(reply, '"id"') > 0
-    Log("Discord file upload " (ok ? "OK" : "failed: " SubStr(reply, 1, 200)))
+    if !ok
+        lastUploadError := "curl exit " exitCode ": " SubStr(reply, 1, 160)
+    Log("Discord file upload (curl) " (ok ? "OK" : "failed: " lastUploadError))
     return ok
 }
 
@@ -1701,10 +1796,22 @@ TestDiscord(url, g) {
         return
     }
     SetupWebhook(url)
-    if Discord("Test message: alerts are working!", url)
-        MsgBox("Sent! Check your Discord channel.`nClick Save to keep the link.", TITLE, "Iconi Owner" g.Hwnd)
-    else
+    if !Discord("Test message: alerts are working!", url) {
         MsgBox("Couldn't send. Check the link and your internet.", TITLE, "Icon! Owner" g.Hwnd)
+        return
+    }
+    ; screenshots and clips go a different way than text, so test a picture too
+    pic := IconDir() "\bg_camera.png"
+    if !FileExist(pic)
+        pic := A_ScriptDir "\lobby_loop_icon.png"
+    if !FileExist(pic) {
+        MsgBox("Text sent! Check your Discord channel.`nClick Save to keep the link.", TITLE, "Iconi Owner" g.Hwnd)
+        return
+    }
+    if DiscordFile("Test picture: screenshots and clips are working too! 📸", pic, url)
+        MsgBox("Sent a text and a picture! Check your Discord channel.`nClick Save to keep the link.", TITLE, "Iconi Owner" g.Hwnd)
+    else
+        MsgBox("The text arrived, but the picture didn't:`n`n" lastUploadError "`n`nScreenshots and clips won't arrive until this is fixed.", TITLE, "Icon! Owner" g.Hwnd)
 }
 
 ; Sets the webhook's own name and picture (works with just the webhook link)

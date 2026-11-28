@@ -5,7 +5,7 @@ name: Build
 on:
   push:
     branches: [main]
-    paths: ["lobby_loop.ahk", "lobby_loop_zen.ahk", "lobby_loop.ico", "scripts/check_script.py", ".github/workflows/build.yml"]
+    paths: ["lobby_loop.ahk", "lobby_loop_zen.ahk", "lobby_loop.ico", "scripts/**", ".github/workflows/build.yml"]
   pull_request:
   release:
     types: [published]
@@ -58,6 +58,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { Write-Host $out; throw "$f has a syntax error (see above)" }
             Write-Host "$f OK"
           }
+
+      - name: Discord upload test (real WinHTTP upload, echoed back by httpbin.org)
+        shell: pwsh
+        run: |
+          python scripts/test_upload.py
+          $out = & $env:AHK /ErrorStdOut tests\upload_test.ahk 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch "PASS") { throw "The picture upload code doesn't work" }
 
       - name: Build the .exe files
         shell: pwsh
