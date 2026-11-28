@@ -5,9 +5,9 @@
 ;@Ahk2Exe-SetDescription Lobby Loop
 ;@Ahk2Exe-SetVersion 8.2.0
 ;@Ahk2Exe-SetCompanyName yensobased1 (github.com/yensobased1/lobby-loop)
-;@Ahk2Exe-SetCopyright Open source - MIT licence
+;@Ahk2Exe-SetCopyright Open source, MIT licence
 ;@Ahk2Exe-SetProductName Lobby Loop
-;@Ahk2Exe-SetLegalTrademarks Unofficial Fortnite AFK helper - not affiliated with Epic Games
+;@Ahk2Exe-SetLegalTrademarks Unofficial Fortnite AFK helper, not affiliated with Epic Games
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
