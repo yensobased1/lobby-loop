@@ -77,7 +77,7 @@ def hero():
     p.append(f'<text x="383" y="214" font-family="{BODY_FONT}" font-size="26" font-weight="600" fill="{INK}">Your squad farms the chests. You bot.</text>')
     p.append(f'<text x="383" y="250" font-family="{BODY_FONT}" font-size="18" fill="{MUTED}">AFK helper for Fortnite squad fills, made for overnight runs.</text>')
     x = 383
-    for t, hl in [("v7.9.4", True), ("Free", False), ("Windows 10 / 11", False), ("English · Arabic", False)]:
+    for t, hl in [("v8.0", True), ("Free", False), ("Windows 10 / 11", False), ("English · Arabic", False)]:
         s, w = pill(x, 285, t, fill=NEON if hl else "#FFFFFF", fop=1 if hl else .08, color=BG1 if hl else INK, size=14)
         p.append(s); x += w + 10
     # keys row

@@ -1,7 +1,7 @@
 <p align="center"><img src="assets/banner_hero.png" width="100%" alt="Lobby Loop: your squad farms the chests, you bot"></p>
 
 <p align="center">
-  <a href="https://github.com/yensobased1/lobby-loop/releases/latest"><b>⬇️ Download the latest release</b></a>
+  <a href="https://github.com/yensobased1/lobby-loop/releases/latest"><b>⬇️ Download the latest release</b></a> &nbsp;·&nbsp; <a href="GUIDE.md"><b>📖 User guide</b></a>
 </p>
 
 # 🔁 Lobby Loop
@@ -63,6 +63,8 @@
 | **F10** | Show / hide the status box |
 
 Keep Fortnite as the active window: it pauses when you tab out.
+
+📖 **Full setup, every phone command and troubleshooting: [GUIDE.md](GUIDE.md)**
 
 ## ⚠️ Disclaimer
 Unofficial and not affiliated with Epic Games. Automation may break Epic's rules, so use it at your own risk.

@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 7.9.4
+;@Ahk2Exe-SetVersion 8.0.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "7.9.4"
+VERSION := "8.0"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,15 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.0  (28 Nov 2026) - the finished version",
+    "  * Everything from 7.9.x in one stable release: remote play (Parsec / AnyDesk),",
+    "    never stuck on 'Paused', restarts keep running, treasure recap icons,",
+    "    online treasure words, new icons, the Settings sidebar fixed",
+    "  * Every version is now checked and built automatically on GitHub",
+    "    (syntax, translations, settings), with SHA-256 checksums on each release",
+    "  * Full user guide: GUIDE.md on GitHub (setup, all phone commands, fixes)",
+    "  * Cleaned up old unused code",
+    "",
     "v7.9.4  (28 Nov 2026) - Settings sidebar: section names and highlight are back",
     "",
     "v7.9.3  (28 Nov 2026) - Settings sidebar icons are back",
@@ -480,7 +489,6 @@ for slotKey in StrSplit(String(S["KEY_SLOTS"]), ",", " `t")
 
 ; ---------- State ----------
 running := false
-stopReason := "you"
 matches := 0
 clicks := 0
 sessionStart := 0
@@ -2008,7 +2016,6 @@ LoadTranslations() {
         "Needs Return to lobby (Settings > Play > After a match)", "يتطلب العودة إلى الردهة (الإعدادات > اللعب > بعد المباراة)",
         "now: Play Again", "الآن: Play Again",
         "Lobby proof: screenshot the prize screen, then click Claim", "إثبات الردهة: التقط شاشة الجائزة ثم اضغط Claim",
-        "After each match, go back to the lobby (prize screens only show there)", "بعد كل مباراة، ارجع إلى الردهة (شاشات الجوائز تظهر هناك فقط)",
         "Back to the lobby to check for prizes", "العودة إلى الردهة للبحث عن الجوائز",
         "Checking for prize screens...", "جارٍ البحث عن شاشات الجوائز...",
         "Loading the lobby...", "جارٍ تحميل الردهة...",
@@ -2035,11 +2042,9 @@ LoadTranslations() {
         "Kicked for being idle: {1} times so far.", "طُردت بسبب الخمول: {1} مرات حتى الآن.",
         "Laptop: stop when the battery is low", "الحاسوب المحمول: توقف عندما تنخفض البطارية",
         "Lobby Loop stops after this match ends, so the prize is safe.", "يتوقف Lobby Loop بعد انتهاء هذه المباراة، لتبقى الجائزة بأمان.",
-        "Lobby proof: screenshot the UNLOCKED! screen, then click Claim All", "إثبات الردهة: التقط شاشة UNLOCKED! ثم اضغط Claim All",
         "Never", "أبدًا",
         "Online words: {1}", "الكلمات من الإنترنت: {1}",
         "Open proof screenshots", "فتح لقطات الإثبات",
-        "Saved proof, clicked {1}", "تم حفظ الإثبات، تم الضغط على {1}",
         "Spots the prizes your squad finds in chests, and keeps them safe.", "يرصد الجوائز التي يجدها فريقك في الصناديق ويحفظها بأمان.",
         "Starts the next time Lobby Loop opens Fortnite. Your FPS comes back once Fortnite closes after the run.", "يبدأ في المرة القادمة التي يفتح فيها Lobby Loop لعبة Fortnite. يعود إعداد الإطارات بعد إغلاق Fortnite عقب التشغيل.",
         "Stop after the match when I find:", "توقف بعد المباراة عندما أجد:",
@@ -2057,7 +2062,6 @@ LoadTranslations() {
         "Fortnite Sleep Mode: set it to Never (Settings > Game > Energy Saving)", "وضع السكون في Fortnite: اضبطه على Never (الإعدادات > اللعبة > توفير الطاقة)",
         "Pirate Shop Access", "وصول متجر القراصنة",
         "Gizmo", "أداة",
-        "Weekly treasure cosmetic", "زي الكنز الأسبوعي",
         "Prize banner (must be on screen)", "لافتة الجائزة (يجب أن تظهر على الشاشة)",
         "Pirate Shop Access (pirate token)", "وصول متجر القراصنة (رمز القراصنة)",
         "Gizmos (Sprite Locator, Lucky Locator...)", "الأدوات (Sprite Locator، Lucky Locator...)",
@@ -2107,7 +2111,6 @@ LoadTranslations() {
         "Save a clip (20 s before + 5 s after)", "حفظ مقطع (20 ث قبل + 5 ث بعد)",
         "Send the clip to Discord (if under 10 MB)", "إرسال المقطع إلى Discord (إذا كان أقل من 10 ميغابايت)",
         "Set your recorder's clip length to 25 seconds (Game Bar: 30).", "اضبط طول المقطع في برنامج التسجيل على 25 ثانية (Game Bar: ‏30).",
-        "Spots treasure on screen and tells you, with a screenshot or a clip.", "يرصد الكنوز على الشاشة ويخبرك، مع لقطة شاشة أو مقطع.",
         "Squad fill", "تعبئة الفريق",
         "Stop after this many matches (0 = no limit):", "التوقف بعد هذا العدد من المباريات (0 = بلا حد):",
         "Stopped: {1} matches done", "توقف: انتهت {1} مباريات",
@@ -2121,7 +2124,6 @@ LoadTranslations() {
         "Wait (seconds)", "الانتظار (ثوانٍ)",
         "Wait and tell me", "انتظر وأخبرني",
         "Watch for treasure", "مراقبة الكنوز",
-        "Weekly treasure cosmetics", "أزياء الكنوز الأسبوعية",
         "What Lobby Loop reads on screen", "ما يقرؤه Lobby Loop على الشاشة",
         "What to look for", "عمّ تبحث",
         "When I find treasure", "عندما أجد كنزًا",
@@ -2177,12 +2179,9 @@ LoadTranslations() {
         "This removes the shortcuts, Start with Windows and the program file.", "سيؤدي هذا إلى إزالة الاختصارات والتشغيل مع Windows وملف البرنامج.",
         "To teach one: hover over an empty part of the popup's button and press {1}. To forget the one under the mouse: Shift+{1}.", "لتعليم زر: ضع المؤشر على جزء فارغ من زر النافذة واضغط {1}. لنسيان الزر تحت المؤشر: Shift+{1}.",
         "Tools", "الأدوات",
-        "Treasure words (separated by commas):", "كلمات الكنوز (مفصولة بفواصل):",
-        "Treasure!", "كنز!",
         "Type !help in your channel to see all 30+ commands.", "اكتب !help في قناتك لرؤية أكثر من 30 أمرًا.",
         "Uninstall", "إلغاء التثبيت",
         "Use the pasted code", "استخدام الرمز الملصق",
-        "Watch for treasure (gizmos, pirate tokens...)", "مراقبة الكنوز (gizmos، رموز القراصنة...)",
         "What happened? (what you did, what you expected, what went wrong)", "ماذا حدث؟ (ماذا فعلت، ماذا توقعت، ما الخطأ)",
         "Yellow", "أصفر",
         "Your log and version are added for you. Nothing personal is sent.", "يُضاف السجل والإصدار تلقائيًا. لا يُرسل أي شيء شخصي.",
@@ -2216,7 +2215,6 @@ LoadTranslations() {
         "on", "مفعّل",
         "off", "معطّل",
         "Updates", "التحديثات",
-        "Screen {1}", "الشاشة {1}",
         "Learned popup buttons: {1}", "أزرار النوافذ المنبثقة المحفوظة: {1}",
         "Closes by itself, or press {1} again.", "يُغلق تلقائيًا، أو اضغط {1} مجددًا.",
         "Double-click the tray icon to start or stop", "انقر نقرًا مزدوجًا على أيقونة الشريط للتشغيل أو الإيقاف",
@@ -2233,7 +2231,6 @@ LoadTranslations() {
         "Discord alerts", "تنبيهات Discord",
         "Phone control", "التحكم من الهاتف",
         "Look", "المظهر",
-        "How long it runs and what happens after.", "مدة التشغيل وما يحدث بعدها.",
         "Comfort and stats while it runs.", "راحة وإحصائيات أثناء التشغيل.",
         "Messages, screenshots and a daily summary in your channel.", "رسائل ولقطات شاشة وملخص يومي في قناتك.",
         "Control Lobby Loop from Discord on your phone (optional).", "تحكم في Lobby Loop من Discord على هاتفك (اختياري).",
@@ -2353,8 +2350,6 @@ LoadTranslations() {
         "Screenshot to Discord after every match", "إرسال لقطة شاشة إلى Discord بعد كل مباراة",
         "Daily Discord summary at (blank = off):", "ملخص يومي على Discord الساعة (فارغ = معطل):",
         "Discord alert link (optional):", "رابط تنبيهات Discord (اختياري):",
-        "Paste your Discord webhook link here. Blank = no alerts.", "الصق رابط Webhook هنا. فارغ = بدون تنبيهات.",
-        "Phone control (Discord bot, optional):", "التحكم من الهاتف (بوت Discord، اختياري):",
         "Bot token", "رمز البوت",
         "Channel ID", "معرف القناة",
         "Your Discord user ID (only you can control it)", "معرف مستخدم Discord الخاص بك (أنت فقط يمكنك التحكم)",
@@ -6100,62 +6095,6 @@ StopIfFound(where) {
     ToggleRun("found " found)
     SetStatus("🏴‍☠️ " Tx("Stopped: found {1}", found))
     StartStopAction()
-    return true
-}
-
-; ============================================================
-; v7.7: lobby proof: when the lobby shows an UNLOCKED! treasure screen, save a screenshot first,
-;       then click Claim All
-; ============================================================
-LobbyProof(lines, joined) {
-    global lastClaimTick, clicks
-    static lastProof := 0
-    if (!S["TREASURE_PROOF"] || A_TickCount - lastProof < 20000)
-        return false
-    prizeScreen := InStr(joined, "UNLOCKED")
-    if !prizeScreen
-        for w in WordList(S["TREASURE_FOUND_WORDS"])
-            if InStr(joined, w)
-                prizeScreen := true
-    if !prizeScreen
-        return false
-    isTreasure := InStr(joined, "PIRATE SHOP ACCESS")
-    if !isTreasure
-        for cat in TreasureCategories()
-            for w in cat.words
-                if (StrLen(LTrim(w, "!")) >= 6 && InStr(joined, LTrim(w, "!"))) {
-                    isTreasure := true
-                    break
-                }
-    if !isTreasure
-        return false
-    btn := ""
-    for ln in lines {
-        u := Trim(StrUpper(ln.text))
-        if (u = "CLAIM ALL" || u = "CLAIM" || u = "CLAIM REWARD" || u = "COLLECT")
-            btn := ln
-    }
-    if !IsObject(btn)
-        return false
-    lastProof := A_TickCount
-    dir := DATA_DIR "\" BASE "_treasure_proof"
-    try DirCreate(dir)
-    shot := dir "\" FormatTime(, "yyyy-MM-dd_HH-mm-ss") ".png"
-    saved := SaveRegionImage(shot, MON_X, MON_Y, MON_W, MON_H)
-    Log("Lobby proof " (saved ? "saved: " shot : "screenshot failed"))
-    if (saved && DiscordReady())
-        DiscordFile("🏴‍☠️ **Treasure unlocked** on " PlayerName() "'s account. Proof screenshot, clicking " btn.text " now.", shot)
-    if !WinActive(S["GAME_WINDOW"])                    ; may have just stopped for this find: still claim it
-        return true
-    Sleep(400)
-    ReleaseAll()
-    OwnMouse(), MouseMove(btn.x + btn.w // 2, btn.y + btn.h // 2, 5)
-    Sleep(180)
-    Click()
-    clicks += 1
-    lastClaimTick := A_TickCount
-    Log("Lobby proof: clicked '" btn.text "'")
-    SetStatus("📸 " Tx("Saved proof, clicked {1}", btn.text))
     return true
 }
 
