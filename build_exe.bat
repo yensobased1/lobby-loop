@@ -23,8 +23,22 @@ for %%E in (lobby_loop.exe lobby_loop_zen.exe) do (
     set "CLOSED=1"
   )
 )
-if defined CLOSED timeout /t 3 /nobreak >nul
-for %%E in (lobby_loop.exe lobby_loop_zen.exe) do taskkill /f /im %%E >nul 2>nul
+rem give it up to 15 seconds to close properly (so it doesn't start in Safe mode next time)
+set /a WAITS=0
+:wait_close
+if not defined CLOSED goto closed
+set "STILL="
+for %%E in (lobby_loop.exe lobby_loop_zen.exe) do tasklist /fi "imagename eq %%E" 2>nul | find /i "%%E" >nul && set "STILL=1"
+if not defined STILL goto closed
+set /a WAITS+=1
+if %WAITS% geq 15 (
+  for %%E in (lobby_loop.exe lobby_loop_zen.exe) do taskkill /f /im %%E >nul 2>nul
+  timeout /t 1 /nobreak >nul
+  goto closed
+)
+timeout /t 1 /nobreak >nul
+goto wait_close
+:closed
 
 rem ---- build an .exe for every Lobby Loop script in this folder ----
 set "FAILS=0"
