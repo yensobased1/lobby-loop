@@ -1,0 +1,131 @@
+name: Build
+# Every push: checks the scripts and builds both .exe files with real AutoHotkey on Windows.
+# Publishing a release (tag vX.Y.Z): also attaches the .exe files to it, puts them on main and
+# bumps version.txt LAST, so auto-update never offers a version whose .exe isn't uploaded yet.
+on:
+  push:
+    branches: [main]
+    paths: ["lobby_loop.ahk", "lobby_loop_zen.ahk", "lobby_loop.ico", "scripts/check_script.py", ".github/workflows/build.yml"]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && 'main' || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Static checks (settings, translations, globals)
+        shell: bash
+        run: |
+          python scripts/check_script.py lobby_loop.ahk
+          python scripts/check_script.py lobby_loop_zen.ahk
+
+      - name: Get AutoHotkey v2 and Ahk2Exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force tools | Out-Null
+          gh release download --repo AutoHotkey/AutoHotkey --pattern "AutoHotkey_2.*.zip" --dir tools
+          gh release download --repo AutoHotkey/Ahk2Exe --pattern "Ahk2Exe*.zip" --dir tools
+          Get-ChildItem tools\AutoHotkey_2*.zip | ForEach-Object { Expand-Archive $_ -DestinationPath tools\ahk -Force }
+          Get-ChildItem tools\Ahk2Exe*.zip | ForEach-Object { Expand-Archive $_ -DestinationPath tools\a2e -Force }
+          $ahk = (Get-ChildItem tools\ahk -Recurse -Filter AutoHotkey64.exe | Select-Object -First 1).FullName
+          $a2e = (Get-ChildItem tools\a2e -Recurse -Filter Ahk2Exe.exe | Select-Object -First 1).FullName
+          "AHK=$ahk" >> $env:GITHUB_ENV
+          "A2E=$a2e" >> $env:GITHUB_ENV
+          Write-Host "AutoHotkey: $ahk"; Write-Host "Ahk2Exe: $a2e"
+
+      - name: Syntax check with real AutoHotkey
+        shell: pwsh
+        run: |
+          foreach ($f in "lobby_loop.ahk", "lobby_loop_zen.ahk") {
+            $out = & $env:AHK /ErrorStdOut /validate $f 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { Write-Host $out; throw "$f has a syntax error (see above)" }
+            Write-Host "$f OK"
+          }
+
+      - name: Build the .exe files
+        shell: pwsh
+        run: |
+          foreach ($n in "lobby_loop", "lobby_loop_zen") {
+            Remove-Item "$n.exe" -ErrorAction SilentlyContinue
+            $p = Start-Process -FilePath $env:A2E -ArgumentList "/in `"$n.ahk`" /out `"$n.exe`" /base `"$env:AHK`" /silent verbose" -Wait -PassThru -NoNewWindow
+            if (!(Test-Path "$n.exe")) { throw "Ahk2Exe couldn't build $n.exe (exit $($p.ExitCode))" }
+            $v = (Get-Item "$n.exe").VersionInfo.FileVersion
+            Write-Host "$n.exe built, version $v, $((Get-Item "$n.exe").Length) bytes"
+          }
+
+      - name: Version in the .exe matches the script
+        shell: pwsh
+        run: |
+          $want = (Select-String -Path lobby_loop.ahk -Pattern '^VERSION := "([\d.]+)"').Matches[0].Groups[1].Value
+          "VERSION=$want" >> $env:GITHUB_ENV
+          foreach ($n in "lobby_loop", "lobby_loop_zen") {
+            $got = (Get-Item "$n.exe").VersionInfo.FileVersion
+            if (-not $got.StartsWith($want)) { throw "$n.exe says $got but the script says $want" }
+          }
+          Get-FileHash lobby_loop.exe, lobby_loop_zen.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Tee-Object SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lobby-loop-exe
+          path: |
+            lobby_loop.exe
+            lobby_loop_zen.exe
+            SHA256SUMS.txt
+
+      - name: VirusTotal scan (only if the VT_API_KEY secret is set)
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: |
+          if (-not $env:VT_API_KEY) { Write-Host "No VT_API_KEY secret, skipping"; "VT_LINKS=" >> $env:GITHUB_ENV; exit 0 }
+          $links = @()
+          foreach ($n in "lobby_loop.exe", "lobby_loop_zen.exe") {
+            curl.exe -s --request POST --url https://www.virustotal.com/api/v3/files --header "x-apikey: $env:VT_API_KEY" --form "file=@$n" | Out-Null
+            $h = (Get-FileHash $n -Algorithm SHA256).Hash.ToLower()
+            $links += "- [$n](https://www.virustotal.com/gui/file/$h)"
+          }
+          $md = ($links -join "`n")
+          "VT_LINKS<<EOF`n$md`nEOF" >> $env:GITHUB_ENV
+
+      - name: Publish (release only)
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          set -e
+          TAG="${{ github.event.release.tag_name }}"
+          if [ "v$VERSION" != "$TAG" ]; then echo "Tag $TAG doesn't match script version $VERSION"; exit 1; fi
+          gh release upload "$TAG" lobby_loop.exe lobby_loop_zen.exe SHA256SUMS.txt --clobber
+          # add checksums (and VirusTotal links) to the release notes
+          BODY=$(gh release view "$TAG" --json body -q .body)
+          EXTRA=$'\n\n## 🔒 Checksums (SHA-256)\n```\n'"$(cat SHA256SUMS.txt)"$'\n```'
+          if [ -n "$VT_LINKS" ]; then EXTRA="$EXTRA"$'\n\n**VirusTotal scans:**\n'"$VT_LINKS"; fi
+          case "$BODY" in *"Checksums (SHA-256)"*) ;; *) gh release edit "$TAG" --notes "$BODY$EXTRA" ;; esac
+          # .exe files on main first, version.txt last (auto-update reads version.txt)
+          git config user.name "lobby-loop-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add lobby_loop.exe lobby_loop_zen.exe
+          git commit -m "Build $TAG: .exe files [skip ci]" || echo "exe unchanged"
+          git push origin HEAD:main
+          printf 'version=%s\n' "$VERSION" > version.txt
+          git add version.txt
+          git commit -m "Release $TAG: version.txt [skip ci]" || echo "version.txt unchanged"
+          git push origin HEAD:main
