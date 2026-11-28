@@ -3,7 +3,7 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop Zen
 ;@Ahk2Exe-SetDescription Lobby Loop Zen
-;@Ahk2Exe-SetVersion 8.0.1
+;@Ahk2Exe-SetVersion 8.1.0
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +14,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop Zen"
-VERSION := "8.0.1"
+VERSION := "8.1"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +22,11 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.1  (28 Nov 2026) - tidier Settings",
+    "  * 14 sections are now 10: Play has tabs for Play | Mode | Squad fill, Treasure",
+    "    for Treasure | Alerts & clips, and Discord & phone for Discord alerts | Phone",
+    "  * Search still jumps straight to any option, on any tab",
+    "",
     "v8.0.1  (28 Nov 2026) - Discord pictures (GitHub issue #1)",
     "  * Screenshots, clips and logs are sent from inside Lobby Loop (like text), so an",
     "    antivirus that blocks curl.exe can't stop them any more",
@@ -568,6 +573,8 @@ squadBaseline := 0     ; most rows seen in the squad list this match
 squadLowSince := 0
 squadLeft := false
 serverFetches := 0     ; how many times the Epic status page was really read
+SETTINGS_GROUPS := []  ; settings sidebar: [[page numbers], name] per sidebar button
+SETTINGS_TABS := Map()  ; settings tabs: tab text hwnd -> [control, page number]
 NAV_ICONS := Map()     ; settings sidebar: nav text hwnd -> [picture, folder, icon]
 fnStartTick := 0       ; when Fortnite was (last seen) started, for the fresh restart
 PANEL_EMOJI := [["%E2%96%B6%EF%B8%8F", "start"], ["%E2%8F%B9%EF%B8%8F", "stop"], ["%F0%9F%93%B8", "ss"],
@@ -1131,16 +1138,60 @@ ShowGuide(kind, owner := "") {
 ; Settings window: sidebar with sections
 ; ============================================================
 SettingsNav(index, pages, navs, *) {
+    gi := SettingsGroupOf(index)
     for i, pg in pages
         for ctrl in pg
             ctrl.Visible := (i = index)
     for i, n in navs {
-        n.Opt("Background" (i = index ? UiCol("sel") : UiCol("side")))
-        n.SetFont(i = index ? "bold" : "norm")
+        n.Opt("Background" (i = gi ? UiCol("sel") : UiCol("side")))
+        n.SetFont(i = gi ? "bold" : "norm")
         n.Redraw()
         if NAV_ICONS.Has(n.Hwnd) {                      ; icon follows the highlight colour
             ni := NAV_ICONS[n.Hwnd]
-            try ni[1].Value := ni[2] "\" (i = index ? "sel_" : "side_") ni[3] ".png"
+            try ni[1].Value := ni[2] "\" (i = gi ? "sel_" : "side_") ni[3] ".png"
+        }
+    }
+    for hwnd, t in SETTINGS_TABS {                      ; the open page's tab is highlighted
+        on := (t[2] = index)
+        try {
+            t[1].Opt("Background" (on ? UiCol("sel") : UiCol("side")))
+            t[1].SetFont((on ? "bold c" UiCol("text") : "norm c" UiCol("muted")))
+            t[1].Redraw()
+        }
+    }
+}
+
+; Which sidebar button a page belongs to. With onlyTabbed, 0 unless that button has tabs.
+SettingsGroupOf(page, onlyTabbed := false) {
+    for i, grp in SETTINGS_GROUPS
+        for p in grp[1]
+            if (p = page)
+                return (onlyTabbed && grp[1].Length < 2) ? 0 : i
+    return onlyTabbed ? 0 : 1
+}
+
+; Small tabs at the top right of pages that share a sidebar button (e.g. Play | Mode | Squad fill)
+AddSettingsTabs(g, pages, navs, rightEdge) {
+    static names := ["Play", "Mode", "Squad fill", "Schedule", "Extras", "Treasure", "Alerts & clips", "Hotkeys", "Popups",
+                     "Discord alerts", "Phone control", "Look", "Storage", "Share & tools"]
+    for grp in SETTINGS_GROUPS {
+        if (grp[1].Length < 2)
+            continue
+        widths := [], total := 0
+        for q in grp[1] {
+            w := StrLen(Tx(names[q])) * 8 + 26
+            widths.Push(w), total += w + 4
+        }
+        for p in grp[1] {
+            x := rightEdge - total
+            for k, q in grp[1] {
+                t := g.Add("Text", "x" x " y24 w" widths[k] " h28 0x200 Center Background" UiCol("side"), StrReplace(Tx(names[q]), "&", "&&"))
+                t.SetFont("s9 norm c" UiCol("muted"))
+                t.OnEvent("Click", SettingsNav.Bind(q, pages, navs))
+                pages[p].Push(t)
+                SETTINGS_TABS[t.Hwnd] := [t, q]
+                x += widths[k] + 4
+            }
         }
     }
 }
@@ -1985,6 +2036,7 @@ GuiOpts(extra := "") {
 
 LoadTranslations() {
     return Map(
+        "Discord & phone", "Discord والهاتف",
         "Update available", "يتوفر تحديث",
         "Version {1} is ready. Tray menu > Check for updates, or !update from your phone.", "الإصدار {1} جاهز. قائمة الدرج > التحقق من التحديثات، أو ‎!update من هاتفك.",
         "Fortnite isn't the window in front, so nothing is happening.", "Fortnite ليس النافذة الأمامية، لذلك لا يحدث شيء.",
@@ -5452,7 +5504,7 @@ SetGameVolume(pct) {
 ; v7.6: Settings window (12 sections)
 ; ============================================================
 OpenSettings(startPage := 1) {
-    global wordsShown
+    global wordsShown, SETTINGS_GROUPS, SETTINGS_TABS
     g := ThemeGui(TITLE " - " Tx("Settings"))
     c := Map()
     pages := []
@@ -5468,9 +5520,13 @@ OpenSettings(startPage := 1) {
     UiText(g, "x20 y+2 w170", "v" VERSION, "muted", UiCol("side"))
     sections := [["🎮", "Play"], ["🎯", "Mode"], ["🤝", "Squad fill"], ["⏰", "Schedule"], ["✨", "Extras"], ["🏴‍☠️", "Treasure"], ["🎬", "Alerts & clips"],
                  ["⌨️", "Hotkeys"], ["🧩", "Popups"], ["🔔", "Discord alerts"], ["📱", "Phone control"], ["🎨", "Look"], ["🧹", "Storage"], ["🔗", "Share & tools"]]
-    for i, sec in sections {
-        n := g.Add("Text", "x10 y" (72 + (i - 1) * 40) " w180 h35 0x200 Background" UiCol("side"), "           " StrReplace(Tx(sec[2]), "&", "&&"))
-        n.OnEvent("Click", SettingsNav.Bind(i, pages, navs))
+    ; v8.1: 14 pages in 10 sidebar buttons; pages that belong together share a button and get tabs
+    SETTINGS_GROUPS := [[[1, 2, 3], "Play"], [[4], "Schedule"], [[5], "Extras"], [[6, 7], "Treasure"], [[8], "Hotkeys"],
+                               [[9], "Popups"], [[10, 11], "Discord & phone"], [[12], "Look"], [[13], "Storage"], [[14], "Share & tools"]]
+    SETTINGS_TABS := Map()
+    for i, grp in SETTINGS_GROUPS {
+        n := g.Add("Text", "x10 y" (72 + (i - 1) * 40) " w180 h35 0x200 Background" UiCol("side"), "           " StrReplace(Tx(grp[2]), "&", "&&"))
+        n.OnEvent("Click", SettingsNav.Bind(grp[1][1], pages, navs))
         navs.Push(n)
     }
     sbox := UiEdit(g, "x12 y652 w176 r1", "")
@@ -5485,7 +5541,7 @@ OpenSettings(startPage := 1) {
     }
     newPage(title, sub := "") {
         pages.Push([])
-        add(UiText(g, "x" CX " y22 w" CW, title, "title"))
+        add(UiText(g, "x" CX " y22 w" (SettingsGroupOf(pages.Length, true) ? CW - 330 : CW), title, "title"))
         if (sub != "")
             add(UiText(g, "x" CX " y+2 w" CW, sub, "muted"))
     }
@@ -5854,6 +5910,7 @@ OpenSettings(startPage := 1) {
     g.OnEvent("Escape", (*) => g.Destroy())
 
     AddSettingsIcons(g, pages, navs, sections)
+    AddSettingsTabs(g, pages, navs, CX + CW)
     ; new controls go UNDER older ones, so only now (after everything exists) send the sidebar background to the very bottom
     DllCall("SetWindowPos", "Ptr", sideBg.Hwnd, "Ptr", 1, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x13)
     SettingsNav(Min(Max(1, startPage), pages.Length), pages, navs)
@@ -7113,6 +7170,8 @@ SettingsSearch(box, pages, navs, *) {
     hits := []
     for i, pg in pages {
         for ctrl in pg {
+            if SETTINGS_TABS.Has(ctrl.Hwnd)                 ; a tab's name isn't a setting
+                continue
             try t := ctrl.Text
             catch
                 continue
@@ -7122,8 +7181,11 @@ SettingsSearch(box, pages, navs, *) {
             }
         }
     }
-    for i, n in navs                                       ; pages with a match get a dot
-        n.Text := RegExReplace(n.Text, "  •$") (HasValue(hits, i) ? "  •" : "")
+    hitGroups := []
+    for h in hits
+        hitGroups.Push(SettingsGroupOf(h))
+    for i, n in navs                                       ; buttons with a match get a dot
+        n.Text := RegExReplace(n.Text, "  •$") (HasValue(hitGroups, i) ? "  •" : "")
     if hits.Length
         SettingsNav(hits[1], pages, navs)
 }
@@ -7919,6 +7981,7 @@ SectionIcon(name) {
         "Hotkeys", "keyboard",
         "Popups", "puzzle",
         "Discord alerts", "chat",
+        "Discord & phone", "chat",
         "Phone control", "phone",
         "Look", "palette",
         "Storage", "broom",
@@ -7932,7 +7995,7 @@ AddSettingsIcons(g, pages, navs, sections) {
     if !FileExist(dir "\side_gamepad.png")
         return
     for i, n in navs {
-        ic := SectionIcon(sections[i][2])
+        ic := SectionIcon(SETTINGS_GROUPS[i][2])
         if (ic = "" || !FileExist(dir "\side_" ic ".png"))
             continue
         n.Opt("+0x4000000")                             ; clip siblings: don't paint over the icon
