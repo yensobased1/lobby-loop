@@ -4644,9 +4644,9 @@ MainLoop() {
     if !WinActive(S["GAME_WINDOW"]) {
         if !unfocusedSince
             unfocusedSince := A_TickCount
-        if (A_TickCount < activateUntil)
+        if (A_TickCount < activateUntil) {
             try WinActivate(S["GAME_WINDOW"])    ; we just opened it: bring it to the front
-        else if (S["REMOTE_MODE"] && S["REMOTE_REFOCUS"] && A_TickCount - unfocusedSince > 90000) {
+        } else if (S["REMOTE_MODE"] && S["REMOTE_REFOCUS"] && A_TickCount - unfocusedSince > 90000) {
             Log("Remote play: Fortnite lost focus for 90 s, bringing it back")
             try WinActivate(S["GAME_WINDOW"])
             unfocusedSince := A_TickCount
