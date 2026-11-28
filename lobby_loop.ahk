@@ -3,7 +3,11 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 8.1.0
+;@Ahk2Exe-SetVersion 8.2.0
+;@Ahk2Exe-SetCompanyName yensobased1 (github.com/yensobased1/lobby-loop)
+;@Ahk2Exe-SetCopyright Open source, MIT licence
+;@Ahk2Exe-SetProductName Lobby Loop
+;@Ahk2Exe-SetLegalTrademarks Unofficial Fortnite AFK helper, not affiliated with Epic Games
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
 ;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
@@ -14,7 +18,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "8.1"
+VERSION := "8.2"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +26,12 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.2  (28 Nov 2026) - no more antivirus false alarms",
+    "  * The screen is read inside Lobby Loop with Windows' own text reader. It no",
+    "    longer starts a hidden PowerShell script every few seconds, which Windows",
+    "    Defender took for a trojan",
+    "  * The .exe now says who made it and what it is (file properties)",
+    "",
     "v8.1  (28 Nov 2026) - tidier Settings",
     "  * 14 sections are now 10: Play has tabs for Play | Mode | Squad fill, Treasure",
     "    for Treasure | Alerts & clips, and Discord & phone for Discord alerts | Phone",
@@ -711,6 +721,8 @@ SetTimer(() => UpdateTreasureWords(), -8000)
 SetTimer(() => UpdateTreasureWords(), 21600000)          ; and every 6 hours
 SetTimer(CheckWindowModeOnce, -15000)
 SetTimer(RemoteWatch, 250)
+loop files A_Temp "\ll_ocr*.ps1"                    ; v8.2: the old PowerShell text reader isn't used any more
+    try FileDelete(A_LoopFileFullPath)
 OnMessage(0x7E, (*) => SetTimer(DisplayChanged, -1500))     ; screen size changed (Parsec / AnyDesk can do this)
 try DllCall("wtsapi32\WTSRegisterSessionNotification", "Ptr", A_ScriptHwnd, "UInt", 0)
 OnMessage(0x2B1, OnSessionChange)                            ; PC locked / unlocked
@@ -2883,21 +2895,10 @@ SaveResultCrops() {
 ; Runs the text reader on the saved crops. Returns {place, xp} ("" when not read).
 ReadResults() {
     result := {place: "", xp: ""}
-    script := A_Temp "\ll_ocr.ps1"
-    out := A_Temp "\ll_ocr.txt"
-    if !FileExist(script)
-        FileAppend(OcrScript(), script, "UTF-8")
-    try FileDelete(out)
-    cmd := 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' script '" "' A_Temp '\ll_place.png" "' A_Temp '\ll_xp.png" "' out '"'
-    try RunWait(cmd, , "Hide")
-    if !FileExist(out) {
-        Log("Text reader gave no result")
-        return result
-    }
-    txt := FileRead(out, "UTF-8")
-    parts := StrSplit(txt, "|||")
-    placeTxt := parts.Length >= 1 ? parts[1] : ""
-    xpTxt := parts.Length >= 2 ? parts[2] : ""
+    placeTxt := "", xpTxt := ""
+    OcrImage(A_Temp "\ll_place.png", &placeTxt)
+    OcrImage(A_Temp "\ll_xp.png", &xpTxt)
+    txt := placeTxt "|||" xpTxt
     if RegExMatch(placeTxt, "#\s*(\d{1,3})", &pm) || RegExMatch(placeTxt, "i)PLACED\D{0,4}(\d{1,3})", &pm)
         result.place := Integer(pm[1])
     if RegExMatch(xpTxt, "i)([\d][\d,\. ]{0,8})\s*XP", &xm) {
@@ -2909,30 +2910,6 @@ ReadResults() {
     return result
 }
 
-OcrScript() {
-    return '
-    (
-param($a, $b, $out)
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
-$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
-$null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics, ContentType = WindowsRuntime]
-$null = [Windows.Globalization.Language, Windows.Globalization, ContentType = WindowsRuntime]
-$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -match "^IAsyncOperation.1$" })[0]
-function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
-$lang = New-Object Windows.Globalization.Language("en-US")
-if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) { $eng = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang) } else { $eng = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }
-function Read-Text($path) {
-  try {
-    $f = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($path)) ([Windows.Storage.StorageFile])
-    $s = Await ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
-    $d = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])
-    $bmp = Await ($d.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
-    $r = Await ($eng.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])
-    $s.Dispose()
-    return $r.Text
-  } catch { return "" }
-}
 $t1 = Read-Text $a
 $t2 = Read-Text $b
 [IO.File]::WriteAllText($out, $t1 + "|||" + $t2)
@@ -3828,13 +3805,7 @@ ScreenReaderTick() {
     img := A_Temp "\ll_screen.png"
     if !SaveRegionImage(img, MON_X, MON_Y, MON_W, MON_H)
         return
-    script := A_Temp "\ll_ocr_lines_v75.ps1"
-    if !FileExist(script)
-        FileAppend(OcrLinesScript(), script, "UTF-8")
-    try FileDelete(out)
-    try Run('powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' script '" "' img '" "' out '"', , "Hide")
-    ocrPending := true
-    ocrStartTick := A_TickCount
+    HandleScreenText(OcrImage(img))                       ; read inside Lobby Loop (no PowerShell)
 }
 
 HandleScreenText(txt) {
@@ -3894,42 +3865,145 @@ IsClaimWord(u) {
     return false
 }
 
-OcrLinesScript() {
-    return '
-    (
-param($in, $out)
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
-$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
-$null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics, ContentType = WindowsRuntime]
-$null = [Windows.Globalization.Language, Windows.Globalization, ContentType = WindowsRuntime]
-$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -match "^IAsyncOperation.1$" })[0]
-function Await($op, $type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
-$lang = New-Object Windows.Globalization.Language("en-US")
-if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($lang)) { $eng = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($lang) } else { $eng = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }
-$sb = New-Object System.Text.StringBuilder
-try {
-  $f = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($in)) ([Windows.Storage.StorageFile])
-  $s = Await ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
-  $d = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])
-  $bmp = Await ($d.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
-  $r = Await ($eng.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])
-  $s.Dispose()
-  foreach ($l in $r.Lines) {
-    $x1 = 99999; $y1 = 99999; $x2 = 0; $y2 = 0
-    foreach ($w in $l.Words) {
-      $b = $w.BoundingRect
-      if ($b.X -lt $x1) { $x1 = $b.X }
-      if ($b.Y -lt $y1) { $y1 = $b.Y }
-      if ($b.X + $b.Width -gt $x2) { $x2 = $b.X + $b.Width }
-      if ($b.Y + $b.Height -gt $y2) { $y2 = $b.Y + $b.Height }
+
+; ============================================================
+; v8.2: Windows' built-in text reader (Windows.Media.Ocr), called from inside Lobby Loop.
+; Before 8.2 a hidden PowerShell script did this every few seconds, which antivirus
+; (Windows Defender) took for a trojan. WinRT interface ids and vtable slots are from
+; Descolada's OCR library for AutoHotkey v2 (MIT licence, github.com/Descolada/OCR).
+; Returns one line per text line: "x|y|w|h|text" (pixels inside the image).
+; ============================================================
+OcrImage(path, &allText := "") {
+    static engine := 0, decoders := 0, lastErr := ""
+    allText := ""
+    out := ""
+    stream := 0, bmp := 0
+    try {
+        if !engine {
+            ocrStatics := WinRtFactory("Windows.Media.Ocr.OcrEngine", "{5BFFA85A-3384-3540-9940-699120D428A8}")
+            langs := WinRtFactory("Windows.Globalization.Language", "{9B0252AC-0C27-44F8-B792-9793FB66C63E}")
+            hs := WinRtString("en-US")
+            lang := ComValue(13, 0)
+            ComCall(6, langs, "ptr", hs, "ptr*", lang)                    ; Language("en-US")
+            DllCall("combase\WindowsDeleteString", "ptr", hs)
+            eng := ComValue(13, 0)
+            ComCall(9, ocrStatics, "ptr", lang, "ptr*", eng)              ; TryCreateFromLanguage
+            if !eng.Ptr {
+                eng := ComValue(13, 0)
+                ComCall(10, ocrStatics, "ptr*", eng)                      ; TryCreateFromUserProfileLanguages
+            }
+            if !eng.Ptr
+                throw Error("no text reader language installed")
+            engine := eng
+            decoders := WinRtFactory("Windows.Graphics.Imaging.BitmapDecoder", "{438CCB26-BCEF-4E95-BAD6-23A822E58D01}")
+        }
+        iid := Buffer(16)
+        DllCall("ole32\CLSIDFromString", "wstr", "{905A0FE1-BC53-11DF-8C49-001E4FC686DA}", "ptr", iid)   ; IRandomAccessStream
+        stream := ComValue(13, 0)
+        if DllCall("ShCore\CreateRandomAccessStreamOnFile", "wstr", path, "uint", 0, "ptr", iid, "ptr*", stream, "uint")
+            throw Error("can't open " path)
+        op := ComValue(13, 0)
+        ComCall(14, decoders, "ptr", stream, "ptr*", op)                  ; BitmapDecoder.CreateAsync
+        decoder := WinRtWait(op)
+        frame := ComObjQuery(decoder, "{FE287C9A-420C-4963-87AD-691436E08383}")   ; IBitmapFrameWithSoftwareBitmap
+        op := ComValue(13, 0)
+        ComCall(6, frame, "ptr*", op)                                     ; GetSoftwareBitmapAsync
+        bmp := WinRtWait(op)
+        op := ComValue(13, 0)
+        ComCall(6, engine, "ptr", bmp, "ptr*", op)                        ; RecognizeAsync
+        res := WinRtWait(op)
+        lines := ComValue(13, 0)
+        ComCall(6, res, "ptr*", lines)                                    ; get_Lines
+        n := 0
+        ComCall(7, lines, "int*", &n)
+        rect := Buffer(16, 0)
+        loop n {
+            line := ComValue(13, 0)
+            ComCall(6, lines, "int", A_Index - 1, "ptr*", line)
+            hText := 0
+            ComCall(7, line, "ptr*", &hText)                              ; get_Text
+            text := WinRtTakeString(hText)
+            words := ComValue(13, 0)
+            ComCall(6, line, "ptr*", words)                               ; get_Words
+            wn := 0
+            ComCall(7, words, "int*", &wn)
+            x1 := 99999, y1 := 99999, x2 := 0, y2 := 0
+            loop wn {
+                word := ComValue(13, 0)
+                ComCall(6, words, "int", A_Index - 1, "ptr*", word)
+                ComCall(6, word, "ptr", rect)                             ; get_BoundingRect {x, y, w, h} floats
+                bx := NumGet(rect, 0, "float"), by := NumGet(rect, 4, "float")
+                bw := NumGet(rect, 8, "float"), bh := NumGet(rect, 12, "float")
+                x1 := Min(x1, bx), y1 := Min(y1, by), x2 := Max(x2, bx + bw), y2 := Max(y2, by + bh)
+            }
+            if !wn
+                continue
+            out .= Round(x1) "|" Round(y1) "|" Round(x2 - x1) "|" Round(y2 - y1) "|" text "`n"
+            allText .= (allText = "" ? "" : "`n") text
+        }
+    } catch as e {
+        if (e.Message != lastErr)                                         ; log each new problem once
+            Log("Text reader: " (lastErr := e.Message))
     }
-    [void]$sb.AppendLine(([string][int]$x1) + "|" + ([string][int]$y1) + "|" + ([string][int]($x2 - $x1)) + "|" + ([string][int]($y2 - $y1)) + "|" + $l.Text)
-  }
-} catch { }
-[IO.File]::WriteAllText($out + ".tmp", $sb.ToString())
-Move-Item -Force ($out + ".tmp") $out
-    )'
+    WinRtClose(bmp), WinRtClose(stream)                                   ; frees the image file for the next screenshot
+    return out
+}
+
+WinRtFactory(className, iidText) {
+    hs := WinRtString(className)
+    iid := Buffer(16)
+    DllCall("ole32\CLSIDFromString", "wstr", iidText, "ptr", iid)
+    f := ComValue(13, 0)
+    hr := DllCall("combase\RoGetActivationFactory", "ptr", hs, "ptr", iid, "ptr*", f, "uint")
+    DllCall("combase\WindowsDeleteString", "ptr", hs)
+    if hr
+        throw Error(className " not available (" Format("{:#x}", hr) ")")
+    return f
+}
+
+WinRtString(str) {
+    hs := 0
+    DllCall("combase\WindowsCreateString", "wstr", str, "uint", StrLen(str), "ptr*", &hs)
+    return hs
+}
+
+WinRtTakeString(hs) {
+    if !hs
+        return ""
+    len := 0
+    p := DllCall("combase\WindowsGetStringRawBuffer", "ptr", hs, "uint*", &len, "ptr")
+    s := StrGet(p, len, "UTF-16")
+    DllCall("combase\WindowsDeleteString", "ptr", hs)
+    return s
+}
+
+; Waits for a Windows async operation (up to 15 s) and returns its result
+WinRtWait(op) {
+    info := ComObjQuery(op, "{00000036-0000-0000-C000-000000000046}")   ; IAsyncInfo
+    t0 := A_TickCount
+    loop {
+        st := 0
+        ComCall(7, info, "uint*", &st)                                   ; Status
+        if (st = 1)
+            break
+        if (st > 1) {
+            code := 0
+            ComCall(8, info, "int*", &code)
+            throw Error("text reader step failed (" Format("{:#x}", code & 0xFFFFFFFF) ")")
+        }
+        if (A_TickCount - t0 > 15000)
+            throw Error("text reader timed out")
+        Sleep(10)
+    }
+    r := ComValue(13, 0)
+    ComCall(8, op, "ptr*", r)                                             ; GetResults
+    return r
+}
+
+WinRtClose(obj) {
+    if !IsObject(obj) || !obj.Ptr
+        return
+    try ComCall(6, ComObjQuery(obj, "{30D5A829-7FA4-4026-83BB-D75BAE4EA99E}"))   ; IClosable.Close
 }
 
 ; ============================================================
@@ -5291,17 +5365,10 @@ RecentTreasureText(count := 5) {
 ; ============================================================
 OcrRegionSync(x, y, w, h) {
     lines := []
-    img := A_Temp "\ll_region.png", out := A_Temp "\ll_region.txt"
+    img := A_Temp "\ll_region.png"
     if !SaveRegionImage(img, x, y, w, h)
         return lines
-    script := A_Temp "\ll_ocr_lines_v75.ps1"
-    if !FileExist(script)
-        FileAppend(OcrLinesScript(), script, "UTF-8")
-    try FileDelete(out)
-    try RunWait('powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' script '" "' img '" "' out '"', , "Hide")
-    if !FileExist(out)
-        return lines
-    for raw in StrSplit(FileRead(out, "UTF-8"), "`n", "`r") {
+    for raw in StrSplit(OcrImage(img), "`n", "`r") {
         p := StrSplit(raw, "|", , 5)
         if (p.Length < 5 || !IsNumber(p[1]))
             continue
