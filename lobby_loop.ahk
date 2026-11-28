@@ -3,9 +3,12 @@
 #UseHook True
 ;@Ahk2Exe-SetName Lobby Loop
 ;@Ahk2Exe-SetDescription Lobby Loop
-;@Ahk2Exe-SetVersion 8.1.1
+;@Ahk2Exe-SetVersion 8.1.2
+;@Ahk2Exe-SetCompanyName yensobased1
+;@Ahk2Exe-SetCopyright Open source - github.com/yensobased1/lobby-loop
+;@Ahk2Exe-SetLegalTrademarks Unofficial fan tool - not affiliated with Epic Games
+;@Ahk2Exe-SetLanguage 0x0409
 ;@Ahk2Exe-SetMainIcon lobby_loop.ico
-;@Ahk2Exe-UpdateManifest 1
 InstallKeybdHook()
 SetWorkingDir(A_ScriptDir)
 SendMode("Event")
@@ -14,7 +17,7 @@ CoordMode("Pixel", "Screen")
 CoordMode("ToolTip", "Screen")
 
 TITLE := "Lobby Loop"
-VERSION := "8.1.1"
+VERSION := "8.1.2"
 
 ; Auto-update link (the raw link to version.txt on GitHub). Can also be set in the settings file.
 UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/version.txt"
@@ -22,6 +25,11 @@ UPDATE_URL_DEFAULT := "https://raw.githubusercontent.com/yensobased1/lobby-loop/
 ICON_URL := "https://raw.githubusercontent.com/yensobased1/lobby-loop/main/lobby_loop_icon.png"
 
 CHANGELOG := [
+    "v8.1.2  (28 Nov 2026) - fewer antivirus false alarms",
+    "  * The .exe now carries full file details (product, publisher, copyright)",
+    "  * The .exe no longer asks for Administrator in its manifest. It still asks",
+    "    once when it starts (one UAC prompt, same as before)",
+    "",
     "v8.1.1  (28 Nov 2026)",
     "  + Treasure: you can leave Pirate Shop Access unclaimed. Lobby Loop takes the",
     "    screenshot, tells you on Discord and your phone, and stops so you claim it",
