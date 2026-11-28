@@ -66,5 +66,22 @@ Keep Fortnite as the active window: it pauses when you tab out.
 
 📖 **Full setup, every phone command and troubleshooting: [GUIDE.md](GUIDE.md)**
 
+## 🛡️ Antivirus may flag it (false positive)
+**Windows Defender or other antivirus may detect `lobby_loop.exe` as a trojan** (for example *"This program is dangerous and executes commands from an attacker"*) and quarantine it. It's a false positive: Lobby Loop is open source, and every line of it is in this repo.
+
+**Why it happens:** to do its job, Lobby Loop does things that malware also does:
+- runs as **Administrator** and uses a **keyboard hook** (to press keys in Fortnite)
+- reads the screen with Windows' text reader through **hidden PowerShell**
+- takes **commands from Discord** (phone control)
+- **downloads its own updates** and can add a **startup shortcut**
+
+**What you can do:**
+1. **Check it's the real file:** compare its SHA-256 with the checksum on the [release page](https://github.com/yensobased1/lobby-loop/releases/latest). Each release also links its VirusTotal scan.
+2. **Allow it:** Windows Security > Virus & threat protection > **Protection history** > the Lobby Loop entry > **Actions > Allow on device**.
+3. **Or run the script instead of the .exe:** `lobby_loop.ahk` with `start_lobby_loop.bat` (installs AutoHotkey if needed). Scripts are flagged far less often.
+4. **Help get it whitelisted:** report it to Microsoft at [microsoft.com/wdsi/filesubmission](https://www.microsoft.com/en-us/wdsi/filesubmission) as *Incorrectly detected*.
+
+> Only allow a file you downloaded from this repo's releases. If you got it anywhere else, delete it.
+
 ## ⚠️ Disclaimer
 Unofficial and not affiliated with Epic Games. Automation may break Epic's rules, so use it at your own risk.

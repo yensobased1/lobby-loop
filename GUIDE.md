@@ -28,6 +28,8 @@ Everything you need to set up Lobby Loop, use it overnight and control it from y
 | **The script** | Put `lobby_loop.ahk` and `start_lobby_loop.bat` in one folder and double-click the `.bat`. It installs [AutoHotkey v2](https://www.autohotkey.com/) for you if it's missing. |
 
 > **Windows SmartScreen** may say "Windows protected your PC" the first time, because the .exe isn't code-signed. Click **More info > Run anyway**. Each release lists the file's SHA-256 checksum so you can confirm it's the real one.
+>
+> **Windows Defender may quarantine it as a trojan.** That's a false positive caused by what Lobby Loop needs to do (Administrator, keyboard hook, hidden PowerShell for screen reading, Discord commands, self-update). See [Antivirus may flag it](README.md#%EF%B8%8F-antivirus-may-flag-it-false-positive) for how to check the file and allow it, or run `lobby_loop.ahk` instead.
 
 Lobby Loop keeps its settings, stats and logs in a **`Lobby Loop data`** folder next to the .exe.
 
@@ -223,6 +225,7 @@ Or click **Overnight treasure farm** in Settings > Play to set the usual options
 | **Phone commands don't answer** | Bot token, channel ID and user ID all filled in (Settings > Phone control); the bot needs **Message Content Intent**. Lobby Loop warns at start if the token is missing. |
 | **"Safe mode" at start** | Lobby Loop didn't close properly last time. A few features are off until you restart it. |
 | **Windows says the file is unsafe** | It's unsigned, see [Install](#1-install). Compare the SHA-256 on the release page. |
+| **Windows Defender quarantined it as a trojan** | False positive. Compare the SHA-256 with the release page, then Windows Security > Protection history > the entry > **Actions > Allow on device**. Or run `lobby_loop.ahk` instead. Details in the [README](README.md#%EF%B8%8F-antivirus-may-flag-it-false-positive). |
 | **Something else** | Settings > Share & tools > **Report a bug** collects the log and a screenshot. |
 
 ## 12. Your files, updates and removing it
