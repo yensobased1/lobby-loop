@@ -2910,11 +2910,6 @@ ReadResults() {
     return result
 }
 
-$t1 = Read-Text $a
-$t2 = Read-Text $b
-[IO.File]::WriteAllText($out, $t1 + "|||" + $t2)
-    )'
-}
 
 ; Called right after Play Again was clicked
 RecordMatch(res) {
